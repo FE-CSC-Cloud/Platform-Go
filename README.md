@@ -6,5 +6,7 @@ Verder gebruiken we
 
 # Development
 1. Installeer [GO](https://golang.org/doc/install) volgens de gelinkte instructies.
-2. Start de dev server met `go run .`
-    Dit download meteen alle dependencies en start de server.
+2. Stel de env in op basis van de `.env.example` bestand.
+3. Draai het project met `go run .`
+    Dit download meteen alle dependencies en start het progamma.
+    Dit moet je elke keer doen als je iets veranderd in de code.
