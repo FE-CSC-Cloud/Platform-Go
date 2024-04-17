@@ -1,8 +1,8 @@
 HAIIII dit is een [GO Echo](https://echo.labstack.com/docs) project
 
 Verder gebruiken we
-- [GoDotEnv](https://pkg.go.dev/github.com/joho/godotenv)
-- [Go-MySQL-Driver](https://pkg.go.dev/github.com/go-sql-driver/mysql)
+- [GoDotEnv](https://github.com/joho/godotenv/blob/main/README.md)
+- [Go-MySQL-Driver](https://github.com/go-sql-driver/mysql/blob/master/README.md)
 
 # Development
 1. Installeer [GO](https://golang.org/doc/install) volgens de gelinkte instructies.
