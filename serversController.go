@@ -1,12 +1,10 @@
 package main
 
 import (
-	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/labstack/echo/v4"
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/joho/godotenv"
 )
@@ -16,15 +14,6 @@ func getServers(c echo.Context) error {
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
-
-	dbUser := os.Getenv("DB_USER")
-	dbPass := os.Getenv("DB_PASS")
-
-	db, err := sql.Open("mysql", dbUser+":"+dbPass+"@/Login")
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
 
 	// Open doesn't open a connection. Validate DSN data:
 	err = db.Ping()
