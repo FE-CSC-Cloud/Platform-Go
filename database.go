@@ -5,9 +5,11 @@ import (
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
+	"github.com/robaho/leveldb"
 	"log"
 )
 
+// opens a connection to the MySQL database
 func connectToDB() (*sql.DB, error) {
 	err := godotenv.Load()
 	if err != nil {
@@ -32,4 +34,16 @@ func connectToDB() (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+// opens a connection to the KeyDB database
+func connectToKeyDB() *leveldb.Database {
+	// Connect to KeyDB
+	db, err := leveldb.Open("keydb", leveldb.Options{})
+
+	if err != nil {
+		log.Fatal("unable to create database", err)
+	}
+
+	return db
 }
