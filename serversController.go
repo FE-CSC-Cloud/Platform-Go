@@ -9,24 +9,50 @@ import (
 	"github.com/joho/godotenv"
 )
 
+type Servers struct {
+	ID               int
+	Users_id         int
+	Name             string
+	Description      string
+	End_date         string
+	Operating_system string
+	Storage          int
+	Memory           int
+	IP               string
+}
+
 func getServers(c echo.Context) error {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
 
-	// Open doesn't open a connection. Validate DSN data:
-	err = db.Ping()
+	db, err := connectToDB()
 	if err != nil {
-		panic(err.Error()) // proper error handling instead of panic in your app
+		log.Fatal("Error connecting to database: ", err)
 	}
 
 	// Prepare statement for reading data
-	rows, err := db.Query("SELECT * FROM users")
+	rows, err := db.Query("SELECT id, users_id, name, description, end_date, operating_system, storage, memory, ip FROM virtual_machines")
+	if err != nil {
+		log.Fatal("Error executing query: ", err)
+	}
 	defer rows.Close()
 
-	// return the result as a json object
-	return c.JSON(http.StatusOK, rows)
+	var rowsArr []Servers
+	for rows.Next() {
+		var s Servers
 
-	// return c.String(http.StatusOK, "dbUser "+dbUser)
+		err = rows.Scan(&s.ID, &s.Users_id, &s.Name, &s.Description, &s.End_date, &s.Operating_system, &s.Storage, &s.Memory, &s.IP)
+		if err != nil {
+			log.Fatal("Error scanning row: ", err)
+		}
+
+		// Print out the server struct
+		log.Println(s)
+
+		rowsArr = append(rowsArr, s)
+	}
+	// return the result as a json object
+	return c.JSON(http.StatusOK, rowsArr)
 }
