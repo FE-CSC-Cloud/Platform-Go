@@ -5,7 +5,7 @@ import (
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
-	"github.com/robaho/leveldb"
+	"github.com/redis/go-redis/v9"
 	"log"
 )
 
@@ -37,13 +37,13 @@ func connectToDB() (*sql.DB, error) {
 }
 
 // opens a connection to the KeyDB database
-func connectToKeyDB() *leveldb.Database {
+func connectToKeyDB() *redis.Client {
 	// Connect to KeyDB
-	db, err := leveldb.Open("keydb", leveldb.Options{})
-
-	if err != nil {
-		log.Fatal("unable to create database", err)
-	}
+	db := redis.NewClient(&redis.Options{
+		Addr:     getEnvVar("KEY_DB_HOST") + ":" + getEnvVar("KEY_DB_PORT"),
+		Password: getEnvVar("KEY_DB_PASS"),
+		DB:       0,
+	})
 
 	return db
 }

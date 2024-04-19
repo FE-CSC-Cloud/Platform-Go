@@ -23,11 +23,11 @@ services:
     ports:
       - "8080:80"
   
-  KeyDB:
-    image: eqalpha/keydb
-    restart: always
-    ports:
-      - "6379:6379"
+  redis:
+      image: redis:latest
+      restart: always
+      ports:
+          - "6379:6379"
 
 volumes:
   db_data:

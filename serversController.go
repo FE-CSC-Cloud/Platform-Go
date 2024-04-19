@@ -22,6 +22,8 @@ type Servers struct {
 }
 
 func getServers(c echo.Context) error {
+	refreshSessionID()
+
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")

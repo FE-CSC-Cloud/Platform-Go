@@ -1,26 +1,38 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 )
 
-type Session struct {
-	Value string `json:"value"`
-}
+func refreshSessionID() string {
+	db := connectToKeyDB()
+	var sessionID string
 
-func refreshSessionID() {
-	log.Println("refresh?")
+	sessionID, err := db.Get(context.Background(), "session").Result()
+	log.Println("Session ID: ", sessionID)
+	if sessionID != "" {
+		return sessionID
+	}
 
-	user := os.Getenv("VCenterUser")
-	pass := os.Getenv("VCenterPass")
-	baseURL := os.Getenv("VCENTER_URL")
+	log.Println("Session ID not found in KeyDB, refreshing session ID")
 
-	client := &http.Client{}
-	req, err := http.NewRequest("POST", baseURL+"/rest/com/vmware/cis/session", nil)
+	user := getEnvVar("VCENTER_USER")
+	pass := getEnvVar("VCENTER_PASS")
+	baseURL := getEnvVar("VCENTER_URL")
+
+	// Create a Transport for our client so we can skip SSL verification because the vCenter certificate is self-signed
+	tlsConfig := &tls.Config{InsecureSkipVerify: !getBoolEnvVar("VERIFY_TLS")}
+	transport := &http.Transport{TLSClientConfig: tlsConfig}
+
+	// Create client with the Transport that skips SSL verification
+	client := &http.Client{Transport: transport}
+
+	req, err := http.NewRequest("POST", baseURL+"/api/session", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -39,22 +51,18 @@ func refreshSessionID() {
 		log.Fatal(err)
 	}
 
-	var session Session
-	err = json.Unmarshal(body, &session)
+	log.Println(string(body))
+
+	err = json.Unmarshal(body, &sessionID)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Here you can use the session value
-	log.Println(session.Value)
-
-	db := connectToKeyDB()
-
-	err = db.Put([]byte("session"), []byte(session.Value))
-
+	err = db.Set(context.Background(), "session", sessionID, 0).Err()
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
-	log.Println("Session ID refreshed, session ID: ", session.Value)
+	return sessionID
 }
