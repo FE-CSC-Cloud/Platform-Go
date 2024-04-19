@@ -9,6 +9,7 @@ import (
 	"time"
 )
 
+// getSession gets the session ID from vCenter
 func getSession() string {
 	defer timeTrack(time.Now(), "getSession")
 	var sessionID string
