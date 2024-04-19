@@ -2,11 +2,10 @@ package main
 
 import (
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"log"
 	"net/http"
-
-	"github.com/joho/godotenv"
 )
 
 type Servers struct {
@@ -22,7 +21,7 @@ type Servers struct {
 }
 
 func getServers(c echo.Context) error {
-	refreshSessionID()
+	var session = refreshSessionID()
 
 	err := godotenv.Load()
 	if err != nil {

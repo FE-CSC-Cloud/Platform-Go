@@ -1,25 +1,26 @@
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"time"
 )
 
 func refreshSessionID() string {
-	db := connectToKeyDB()
+	defer timeTrack(time.Now(), "refreshSessionID")
 	var sessionID string
 
-	sessionID, err := db.Get(context.Background(), "session").Result()
-	log.Println("Session ID: ", sessionID)
+	// Check if the session ID is already stored in Redis so we don't have to get a new one every time
+	sessionID = getFromRedis("session")
 	if sessionID != "" {
+		log.Println("Session ID in Cache: ", sessionID)
 		return sessionID
 	}
 
-	log.Println("Session ID not found in KeyDB, refreshing session ID")
+	log.Println("Session ID not found in Cache, refreshing session ID")
 
 	user := getEnvVar("VCENTER_USER")
 	pass := getEnvVar("VCENTER_PASS")
@@ -29,9 +30,10 @@ func refreshSessionID() string {
 	tlsConfig := &tls.Config{InsecureSkipVerify: !getBoolEnvVar("VERIFY_TLS")}
 	transport := &http.Transport{TLSClientConfig: tlsConfig}
 
-	// Create client with the Transport that skips SSL verification
+	// Create client with the Transport that can skip SSL verification if needed
 	client := &http.Client{Transport: transport}
 
+	// Create a new request to get a new session ID
 	req, err := http.NewRequest("POST", baseURL+"/api/session", nil)
 	if err != nil {
 		log.Fatal(err)
@@ -40,6 +42,7 @@ func refreshSessionID() string {
 	req.SetBasicAuth(user, pass)
 	req.Header.Add("Content-Type", "application/json")
 
+	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Fatal(err)
@@ -51,18 +54,14 @@ func refreshSessionID() string {
 		log.Fatal(err)
 	}
 
-	log.Println(string(body))
-
 	err = json.Unmarshal(body, &sessionID)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Here you can use the session value
-	err = db.Set(context.Background(), "session", sessionID, 0).Err()
-	if err != nil {
-		panic(err)
-	}
+	setToRedis("session", sessionID)
+
+	log.Println("Session ID from vCenter: ", sessionID)
 
 	return sessionID
 }
