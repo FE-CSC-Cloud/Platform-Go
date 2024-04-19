@@ -21,7 +21,7 @@ type Servers struct {
 }
 
 func getServers(c echo.Context) error {
-	getSession()
+	getVCenterSession()
 
 	err := godotenv.Load()
 	if err != nil {
