@@ -15,7 +15,7 @@ func getVCenterSession() string {
 
 	// Check if the session ID is already stored in Redis so we don't have to get a new one every time
 	sessionID = getFromRedis("session")
-	if sessionID != "" {
+	if sessionID != "" && sessionID != "Unauthorized" {
 		log.Println("Session ID in Cache: ", sessionID)
 		expired := checkIfvCenterSessionIsExpired(sessionID)
 
@@ -24,18 +24,11 @@ func getVCenterSession() string {
 		}
 
 		log.Println("Session ID in Cache is expired, refreshing session ID")
-		sessionID = refreshVCenterSession()
-
-		return sessionID
+	} else {
+		log.Println("Session ID not found in Cache, refreshing session ID")
 	}
 
-	log.Println("Session ID not found in Cache, refreshing session ID")
-
-	sessionID = vCenterFetchSession()
-	// handle error_type UNAUTHENTICATED from vCenter
-	if sessionID != "Unauthorized" {
-		setToRedis("session", sessionID)
-	}
+	sessionID = refreshVCenterSession()
 
 	log.Println("Session ID from vCenter: ", sessionID)
 
@@ -90,11 +83,15 @@ func checkIfvCenterSessionIsExpired(sessionID string) bool {
 	client := createVCenterHTTPClient()
 
 	// Create a new request to check if the session ID is still valid
-	req, err := http.NewRequest("GET", getEnvVar("VCENTER_URL")+"api/session", nil)
+	req, err := http.NewRequest("GET", getEnvVar("VCENTER_URL")+"/api/session", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	user := getEnvVar("VCENTER_USER")
+	pass := getEnvVar("VCENTER_PASS")
+
+	req.SetBasicAuth(user, pass)
 	req.Header.Add("vmware-api-session-id", sessionID)
 	req.Header.Add("Content-Type", "application/json")
 
@@ -114,8 +111,15 @@ func checkIfvCenterSessionIsExpired(sessionID string) bool {
 }
 
 func refreshVCenterSession() string {
+	defer timeTrack(time.Now(), "refreshVCenterSession")
 	sessionID := vCenterFetchSession()
-	setToRedis("session", sessionID)
+	if sessionID != "Unauthorized" {
+		setToRedis("session", sessionID)
+	} else {
+		log.Println("Unauthorized, clearing session from cache")
+	}
+
+	log.Println("Refreshing session, id: ", sessionID)
 
 	return sessionID
 }
