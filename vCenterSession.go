@@ -78,8 +78,6 @@ func vCenterFetchSession() string {
 }
 
 func checkIfvCenterSessionIsExpired(sessionID string) bool {
-	defer timeTrack(time.Now(), "checkIfvCenterSessionIsExpired")
-
 	client := createVCenterHTTPClient()
 
 	// Create a new request to check if the session ID is still valid
@@ -104,14 +102,13 @@ func checkIfvCenterSessionIsExpired(sessionID string) bool {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 {
-		return true
+		return false
 	}
 
-	return false
+	return true
 }
 
 func refreshVCenterSession() string {
-	defer timeTrack(time.Now(), "refreshVCenterSession")
 	sessionID := vCenterFetchSession()
 	if sessionID != "Unauthorized" {
 		setToRedis("session", sessionID)
