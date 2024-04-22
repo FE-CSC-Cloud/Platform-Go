@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -39,7 +40,6 @@ func getPowerStatus(session string, vmID string) []vCenterServers {
 	if err != nil {
 		log.Fatal("Error sending request: ", err)
 	}
-	// defer resp.Body.Close()
 
 	// Read the response
 	body, err := ioutil.ReadAll(resp.Body)
@@ -47,6 +47,12 @@ func getPowerStatus(session string, vmID string) []vCenterServers {
 		log.Fatal("Error reading response: ", err)
 	}
 
-	// Print the response
-	return body
+	var servers []vCenterServers
+	err = json.Unmarshal(body, &servers)
+	if err != nil {
+		log.Fatal("Error unmarshalling response: ", err)
+	}
+
+	defer resp.Body.Close()
+	return servers
 }

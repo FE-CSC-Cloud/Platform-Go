@@ -21,11 +21,11 @@ type DBServers struct {
 }
 
 type vCenterServers struct {
-	memory_size_MiB int
-	vm              string
-	name            string
-	power_state     string
-	cpu_count       int
+	Memory_size_MiB int    `json:"memory_size_MiB"`
+	Vm              string `json:"vm"`
+	Name            string `json:"name"`
+	Power_state     string `json:"power_state"`
+	Cpu_count       int    `json:"cpu_count"`
 }
 
 type PowerStatusReturn struct {
@@ -60,17 +60,16 @@ func getServers(c echo.Context) error {
 	}
 	defer rows.Close()
 
-	var rowsArr []DBServers
+	var rowsArr []PowerStatusReturn
 	for rows.Next() {
-		var s DBServers
+		var s PowerStatusReturn
 
 		err = rows.Scan(&s.ID, &s.Users_id, &s.Vcenter_id, &s.Name, &s.Description, &s.End_date, &s.Operating_system, &s.Storage, &s.Memory, &s.IP)
 		if err != nil {
 			log.Fatal("Error scanning row: ", err)
 		}
 
-		// Print out the server struct
-		log.Println(s)
+		s.Power_status = getVCenterPowerState(s.Vcenter_id, serversFromVCenter)
 
 		rowsArr = append(rowsArr, s)
 	}
@@ -78,12 +77,12 @@ func getServers(c echo.Context) error {
 	return c.JSON(http.StatusOK, rowsArr)
 }
 
-func checkIfInVCenter(DBId string, VCenterServers vCenterServers) bool {
+func getVCenterPowerState(DBId string, VCenterServers []vCenterServers) string {
 	for _, server := range VCenterServers {
-		if server.vm == DBId {
-			return true
+		if server.Vm == DBId {
+			return server.Power_state
 		}
 	}
 
-	return true
+	return "UNKNOWN"
 }
