@@ -5,12 +5,10 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"time"
 )
 
 // getVCenterSession gets the session ID from vCenter
 func getVCenterSession() string {
-	defer timeTrack(time.Now(), "getVCenterSession")
 	var sessionID string
 
 	// Check if the session ID is already stored in Redis so we don't have to get a new one every time

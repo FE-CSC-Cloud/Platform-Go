@@ -43,10 +43,10 @@ type PowerStatusReturn struct {
 }
 
 func getServers(c echo.Context) error {
-	// checkIfvCenterSessionIsExpired ~120ms, might not be needed; rest is ~1ms
+	// checkIfvCenterSessionIsExpired is pretty slow, might not be needed every time; rest is ~1ms
 	var session string = getVCenterSession()
 
-	var serversFromVCenter []vCenterServers = getPowerStatus(session, "")
+	var serversFromVCenter = getPowerStatus(session, "")
 
 	db, err := connectToDB()
 	if err != nil {
@@ -85,4 +85,31 @@ func getVCenterPowerState(DBId string, VCenterServers []vCenterServers) string {
 	}
 
 	return "UNKNOWN"
+}
+
+func createServer(c echo.Context) error {
+	db, err := connectToDB()
+	if err != nil {
+		log.Fatal("Error connecting to database: ", err)
+	}
+
+	// Bind the request body to the struct
+	var s DBServers
+	if err := c.Bind(&s); err != nil {
+		return err
+	}
+
+	// Insert the new server into the database
+	stmt, err := db.Prepare("INSERT INTO virtual_machines(users_id, vcenter_id, name, description, end_date, operating_system, storage, memory, ip) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
+	if err != nil {
+		log.Fatal("Error preparing statement: ", err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(s.Users_id, s.Vcenter_id, s.Name, s.Description, s.End_date, s.Operating_system, s.Storage, s.Memory, s.IP)
+	if err != nil {
+		log.Fatal("Error executing statement: ", err)
+	}
+
+	return c.JSON(http.StatusCreated, s)
 }
