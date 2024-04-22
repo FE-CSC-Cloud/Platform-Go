@@ -8,10 +8,10 @@ import (
 
 // opens a connection to the Redis database
 func connectToRedis() *redis.Client {
-	// Connect to KeyDB
+	// Connect to Redis
 	db := redis.NewClient(&redis.Options{
-		Addr:     getEnvVar("KEY_DB_HOST") + ":" + getEnvVar("KEY_DB_PORT"),
-		Password: getEnvVar("KEY_DB_PASS"),
+		Addr:     getEnvVar("REDIS_HOST") + ":" + getEnvVar("REDIS_PORT"),
+		Password: getEnvVar("REDIS_PASS"),
 		DB:       0,
 	})
 
