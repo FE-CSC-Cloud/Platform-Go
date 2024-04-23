@@ -7,7 +7,6 @@ import (
 
 func getTemplates(c echo.Context) error {
 	session := getVCenterSession()
-	fetchTemplatesFromVCenter(session)
-
-	return c.String(http.StatusOK, "Templates fetched")
+	templates := getTemplatesFromVCenter(session)
+	return c.JSON(http.StatusOK, templates)
 }
