@@ -34,3 +34,11 @@ func setToRedis(key string, value string) {
 		log.Println("Error setting value in Redis: ", err)
 	}
 }
+
+func deleteFromRedis(key string) {
+	db := connectToRedis()
+	err := db.Del(context.Background(), key).Err()
+	if err != nil {
+		log.Println("Error deleting value from Redis: ", err)
+	}
+}

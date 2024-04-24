@@ -12,3 +12,12 @@ func stringToInt64(stringToInt string) int64 {
 	}
 	return parsedInt
 }
+
+func checkIfItemIsKeyOfArray(item string, array []string) bool {
+	for _, arrayItem := range array {
+		if item == arrayItem {
+			return true
+		}
+	}
+	return false
+}

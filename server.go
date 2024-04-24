@@ -16,6 +16,7 @@ func main() {
 	// TODO: server aan de requesting user toevoegen
 	e.POST("/servers", createServer)
 
+	// TODO: array met template IDs cachen (fetchTemplateLibraryIdsFromVCenter)
 	// TODO: JSON het zelfde maken als de Laravel JSON
 	/*
 	   {
@@ -37,6 +38,9 @@ func main() {
 	   }
 	*/
 	e.GET("/templates", getTemplates)
+
+	// force the templates to be recached
+	e.GET("/templates/refresh", refreshTemplates)
 
 	e.Logger.Fatal(e.Start(":1323"))
 }
