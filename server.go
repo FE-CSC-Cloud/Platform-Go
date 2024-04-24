@@ -16,6 +16,26 @@ func main() {
 	// TODO: server aan de requesting user toevoegen
 	e.POST("/servers", createServer)
 
+	// TODO: JSON het zelfde maken als de Laravel JSON
+	/*
+	   {
+	       "UBUNTU TEMPLATE": {
+	           "storage": 20,
+	           "memory": 1,
+	           "os": "UBUNTU_64"
+	       },
+	       "OICT-AUTO-Template": {
+	           "storage": 20,
+	           "memory": 1,
+	           "os": "UBUNTU_64"
+	       },
+	       "OICT-AUTO-DEBIAN": {
+	           "storage": 20,
+	           "memory": 1,
+	           "os": "UBUNTU_64"
+	       }
+	   }
+	*/
 	e.GET("/templates", getTemplates)
 
 	e.Logger.Fatal(e.Start(":1323"))
