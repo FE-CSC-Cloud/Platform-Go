@@ -142,10 +142,3 @@ func createServer(c echo.Context) error {
 
 	return c.JSON(http.StatusCreated, "heuye")
 }
-
-func refreshDataStores(c echo.Context) error {
-	session := getVCenterSession()
-	dataStores := updateDataStoreID(session)
-	log.Println(dataStores)
-	return c.JSON(http.StatusOK, dataStores)
-}
