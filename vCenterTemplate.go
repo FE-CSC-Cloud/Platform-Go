@@ -12,10 +12,11 @@ import (
 
 func getTemplatesFromVCenter(session string) []string {
 	var templateNames []string
-	templatesLastUpdated := getFromRedis("templates_last_updated")
-	if templatesLastUpdated == "" {
-		templatesLastUpdated = "0"
+	if existsInRedis("templates_last_updated") == false {
+		setToRedis("templates_last_updated", "0")
 	}
+	templatesLastUpdated := getFromRedis("templates_last_updated")
+
 	templates := fetchTemplateLibraryIdsFromVCenter(session)
 
 	// check if the templates were updated today, otherwise update them

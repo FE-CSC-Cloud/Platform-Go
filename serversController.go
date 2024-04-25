@@ -5,6 +5,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -114,7 +115,6 @@ func createServer(c echo.Context) error {
 	if errDate != nil {
 		return c.JSON(http.StatusBadRequest, "Invalid date format, please use YYYY-MM-DD")
 	}
-	log.Println(endDate)
 
 	// check if the OS exist
 	templates := getTemplatesFromVCenter(session)
@@ -122,7 +122,11 @@ func createServer(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "Invalid operating system")
 	}
 
-	// var User_id int64 = 1
+	var User_id int64 = 1
+
+	var UserIdStr = strconv.FormatInt(User_id, 10)
+
+	var vCenterID = createvCenterVM(session, UserIdStr, json.Name, json.OperatingSystem)
 
 	// Insert the new server into the database
 	stmt, err := db.Prepare("INSERT INTO virtual_machines(users_id, vcenter_id, name, description, end_date, operating_system, storage, memory, ip) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
@@ -131,10 +135,17 @@ func createServer(c echo.Context) error {
 	}
 	defer stmt.Close()
 
-	// _, err = stmt.Exec(User_id, s.Vcenter_id, json.Name, json.Description, endDate, json.Operating_system, s.Storage, s.Memory, s.IP)
+	_, err = stmt.Exec(User_id, vCenterID, json.Name, json.Description, endDate, json.OperatingSystem, json.Storage, json.Memory, "")
 	if err != nil {
 		log.Fatal("Error executing statement: ", err)
 	}
 
 	return c.JSON(http.StatusCreated, "heuye")
+}
+
+func refreshDataStores(c echo.Context) error {
+	session := getVCenterSession()
+	dataStores := updateDataStoreID(session)
+	log.Println(dataStores)
+	return c.JSON(http.StatusOK, dataStores)
 }

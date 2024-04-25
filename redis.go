@@ -22,9 +22,19 @@ func getFromRedis(key string) string {
 	db := connectToRedis()
 	val, err := db.Get(context.Background(), key).Result()
 	if err != nil {
-		log.Println("Error getting value from Redis: ", err)
+		log.Println("Error getting value from Redis: ", err, "Key: ", key)
 	}
 	return val
+}
+
+func existsInRedis(key string) bool {
+	db := connectToRedis()
+	val, err := db.Exists(context.Background(), key).Result()
+	if err != nil {
+		log.Println("Error checking if key exists in Redis: ", err)
+		return false
+	}
+	return val > 0
 }
 
 func setToRedis(key string, value string) {
