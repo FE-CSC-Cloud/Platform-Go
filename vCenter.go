@@ -138,7 +138,8 @@ func createvCenterVM(session string, studentID string, vmName string, templateNa
 
 	defer resp.Body.Close()
 
-	return string(body)
+	// remove the " " from the response and convert it to a string of just the VM ID
+	return string(body[1 : len(body)-1])
 }
 
 func getvCenterDataStoreID(session string) string {
