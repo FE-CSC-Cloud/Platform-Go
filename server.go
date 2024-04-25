@@ -15,6 +15,8 @@ func main() {
 	// TODO: server aan de requesting user toevoegen
 	e.POST("/servers", createServer)
 
+	e.DELETE("/servers/:id", deleteServer)
+
 	// TODO: array met template IDs cachen (fetchTemplateLibraryIdsFromVCenter)
 	// TODO: JSON het zelfde maken als de Laravel JSON
 	/*

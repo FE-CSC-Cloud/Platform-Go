@@ -140,5 +140,41 @@ func createServer(c echo.Context) error {
 		log.Fatal("Error executing statement: ", err)
 	}
 
-	return c.JSON(http.StatusCreated, "heuye")
+	return c.JSON(http.StatusCreated, "Server gemaakt!")
+}
+
+func deleteServer(c echo.Context) error {
+	id := c.Param("id")
+	db, err := connectToDB()
+	if err != nil {
+		log.Fatal("Error connecting to database: ", err)
+	}
+
+	// get the vCenter ID from the database
+	var vCenterID string
+	err = db.QueryRow("SELECT vcenter_id FROM virtual_machines WHERE id = ?", id).Scan(&vCenterID)
+	if err != nil {
+		log.Fatal("Error getting vCenter ID: ", err)
+	}
+
+	// delete the server from vCenter
+	session := getVCenterSession()
+	status := deletevCenterVM(session, vCenterID)
+
+	if !status {
+		return c.JSON(http.StatusBadRequest, "Error deleting server from vCenter")
+	}
+
+	// Prepare statement for deleting data
+	stmt, err := db.Prepare("DELETE FROM virtual_machines WHERE id = ?")
+	if err != nil {
+		log.Fatal("Error preparing statement: ", err)
+	}
+
+	_, err = stmt.Exec(id)
+	if err != nil {
+		log.Fatal("Error executing statement: ", err)
+	}
+
+	return c.JSON(http.StatusCreated, "Server deleted!")
 }

@@ -140,3 +140,61 @@ func createvCenterVM(session string, studentID string, vmName string, templateNa
 	// remove the " " from the response and convert it to a string of just the VM ID
 	return string(body[1 : len(body)-1])
 }
+
+func deletevCenterVM(session string, vmID string) bool {
+	defer timeTrack(time.Now(), "deletevCenterVM")
+
+	success := forcePowerOff(session, vmID)
+	if !success {
+		return false
+	}
+
+	client := createVCenterHTTPClient()
+	baseURL := getEnvVar("VCENTER_URL")
+
+	req, err := http.NewRequest("DELETE", baseURL+"/api/vcenter/vm/"+vmID, nil)
+	if err != nil {
+		log.Fatal("Error creating request: ", err)
+	}
+
+	req.Header.Add("vmware-api-session-id", session)
+
+	// Send the request to delete the VM
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal("Error sending request: ", err)
+	}
+
+	if resp.StatusCode != 204 {
+		return false
+	}
+
+	return true
+}
+
+func forcePowerOff(session string, id string) bool {
+	defer timeTrack(time.Now(), "forcePowerOff")
+	client := createVCenterHTTPClient()
+	baseURL := getEnvVar("VCENTER_URL")
+
+	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=stop", nil)
+	if err != nil {
+		log.Fatal("Error creating request: ", err)
+	}
+
+	req.Header.Add("vmware-api-session-id", session)
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal("Error sending request: ", err)
+	}
+
+	if resp.StatusCode != 204 && resp.StatusCode != 400 {
+		return false
+	}
+
+	defer resp.Body.Close()
+
+	return true
+}
