@@ -45,14 +45,8 @@ type PowerStatusReturn struct {
 }
 
 func getServers(c echo.Context) error {
-	// check if an id is given
+	// check if an id is given in the URL so we can return only that server
 	id := c.Param("id")
-
-	// check if id is a number but don't change it
-	_, err := strconv.Atoi(id)
-	if err != nil && id != "" {
-		return c.JSON(http.StatusBadRequest, "Invalid ID")
-	}
 
 	// checkIfvCenterSessionIsExpired is pretty slow, might not be needed every time; rest is ~1ms
 	var session string = getVCenterSession()
