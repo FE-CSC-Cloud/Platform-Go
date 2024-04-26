@@ -45,6 +45,15 @@ type PowerStatusReturn struct {
 }
 
 func getServers(c echo.Context) error {
+	// check if an id is given
+	id := c.Param("id")
+
+	// check if id is a number but don't change it
+	_, err := strconv.Atoi(id)
+	if err != nil && id != "" {
+		return c.JSON(http.StatusBadRequest, "Invalid ID")
+	}
+
 	// checkIfvCenterSessionIsExpired is pretty slow, might not be needed every time; rest is ~1ms
 	var session string = getVCenterSession()
 
@@ -55,8 +64,14 @@ func getServers(c echo.Context) error {
 		log.Fatal("Error connecting to database: ", err)
 	}
 
+	var whereString string = ""
+	if id != "" {
+		whereString = " WHERE id = ?"
+	}
+
 	// Prepare statement for reading data
-	rows, err := db.Query("SELECT id, users_id, vcenter_id, name, description, end_date, operating_system, storage, memory, ip FROM virtual_machines")
+	// little silly but it works, and it still is a prepared statement
+	rows, err := db.Query("SELECT id, users_id, vcenter_id, name, description, end_date, operating_system, storage, memory, ip FROM virtual_machines"+whereString, id)
 	if err != nil {
 		log.Fatal("Error executing query: ", err)
 	}
@@ -75,6 +90,12 @@ func getServers(c echo.Context) error {
 
 		rowsArr = append(rowsArr, s)
 	}
+
+	// if an id is given, return the first item in the array since there should be only one when an id is given
+	if id != "" {
+		return c.JSON(http.StatusOK, rowsArr[0])
+	}
+
 	// return the result as a json object
 	return c.JSON(http.StatusOK, rowsArr)
 }

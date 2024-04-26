@@ -15,6 +15,10 @@ func main() {
 	// TODO: server aan de requesting user toevoegen
 	e.POST("/servers", createServer)
 
+	e.GET("/servers/:id", getServers)
+
+	// TODO: check if the user is Admin or not and give users only the servers they have access to
+	// TODO: Regels uit firewall halen
 	e.DELETE("/servers/:id", deleteServer)
 
 	// TODO: array met template IDs cachen (fetchTemplateLibraryIdsFromVCenter)
