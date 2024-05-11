@@ -1,13 +1,13 @@
 package main
 
 import (
-	"bytes"
-	"crypto/tls"
-	"encoding/json"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"time"
+    "bytes"
+    "crypto/tls"
+    "encoding/json"
+    "io"
+    "log"
+    "net/http"
+    "time"
 )
 
 type vCenterTemplates struct {
@@ -46,7 +46,7 @@ func getPowerStatusFromvCenter(session string, vmID string) []vCenterServers {
 	}
 
 	// Read the response
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatal("Error reading response: ", err)
 	}
@@ -130,7 +130,7 @@ func createvCenterVM(session string, studentID string, vmName string, templateNa
 	}
 
 	// Read the response
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatal("Error reading response: ", err)
 	}

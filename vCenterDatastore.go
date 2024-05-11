@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/labstack/echo/v4"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -53,7 +53,7 @@ func updateDataStoreID(session string) string {
 		log.Fatal("Error sending request: ", err)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatal("Error reading response: ", err)
 	}

@@ -1,13 +1,13 @@
 package main
 
 import (
-	"encoding/json"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
+    "encoding/json"
+    "io"
+    "log"
+    "net/http"
+    "strconv"
+    "strings"
+    "time"
 )
 
 func getTemplatesFromVCenter(session string) []string {
@@ -46,7 +46,7 @@ func fetchTemplateLibraryIdsFromVCenter(session string) []string {
 		log.Fatal("Error sending request: ", err)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatal("Error reading response: ", err)
 	}
@@ -89,7 +89,7 @@ func updateTemplatesFromVCenter(session string, templateIDs []string) {
 		}
 
 		// Read the response body
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			log.Fatal("Error reading response body:", err)
 			return
