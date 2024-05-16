@@ -51,5 +51,7 @@ func main() {
 	// TODO: zorgen dat alleen Admins dit kunnen doen
 	e.GET("/dataStores/refresh", refreshDataStores)
 
+	e.POST("/auth/login", login)
+
 	e.Logger.Fatal(e.Start(":1323"))
 }
