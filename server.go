@@ -44,12 +44,15 @@ func main() {
 	*/
 	e.GET("/templates", getTemplates)
 
+	g := e.Group("/admin")
+	g.Use(checkIfLoggedIn)
+
 	// force the templates to be recached
 	// TODO: zorgen dat alleen Admins dit kunnen doen
-	e.GET("/templates/refresh", refreshTemplates)
+	g.GET("/templates/refresh", refreshTemplates)
 
 	// TODO: zorgen dat alleen Admins dit kunnen doen
-	e.GET("/dataStores/refresh", refreshDataStores)
+	g.GET("/dataStores/refresh", refreshDataStores)
 
 	e.POST("/auth/login", login)
 
