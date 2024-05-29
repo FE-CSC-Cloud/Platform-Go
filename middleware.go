@@ -11,16 +11,12 @@ import (
 
 func checkIfLoggedIn(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		// get the token from the request as bearer token
-		token := c.Request().Header.Get("Authorization")
+		token := formatJWTfromBearer(c)
 
 		// check if the token is valid
 		if token == "" {
 			return echo.ErrUnauthorized
 		}
-
-		// strip the "bearer " part of the token
-		token = strings.TrimPrefix(token, "Bearer ")
 
 		valid, expired, err := checkJWT(token)
 		if err != nil {
@@ -40,6 +36,16 @@ func checkIfLoggedIn(next echo.HandlerFunc) echo.HandlerFunc {
 
 		return next(c)
 	}
+}
+
+func formatJWTfromBearer(c echo.Context) string {
+	// get the token from the request as bearer token
+	token := c.Request().Header.Get("Authorization")
+
+	// strip the "bearer " part of the token
+	token = strings.TrimPrefix(token, "Bearer ")
+
+	return token
 }
 
 // valid, expired, error

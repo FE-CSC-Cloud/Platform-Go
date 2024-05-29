@@ -1,17 +1,18 @@
 package main
 
 import (
+	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/labstack/echo/v4"
 	"log"
 	"net/http"
-	"strconv"
+	"sync"
 	"time"
 )
 
 type DBServers struct {
 	ID              int
-	UsersId         int
+	UsersId         string
 	VcenterId       string
 	Name            string
 	Description     string
@@ -31,67 +32,95 @@ type vCenterServers struct {
 }
 
 type PowerStatusReturn struct {
-	ID               int
-	Users_id         int
-	Vcenter_id       string
-	Name             string
-	Description      string
-	End_date         string
-	Operating_system string
-	Storage          int
-	Memory           int
-	IP               string
-	Power_status     string
+	ID              int
+	UsersId         string
+	VcenterId       string
+	Name            string
+	Description     string
+	EndDate         string
+	OperatingSystem string
+	Storage         int
+	Memory          int
+	IP              string
+	PowerStatus     string
 }
 
 func getServers(c echo.Context) error {
-	// check if an id is given in the URL so we can return only that server
 	id := c.Param("id")
-
-	// checkIfvCenterSessionIsExpired is pretty slow, might not be needed every time; rest is ~1ms
-	var session string = getVCenterSession()
-
-	var serversFromVCenter = getPowerStatusFromvCenter(session, "")
+	user, admin := getUserAssociatedWithJWT(c)
+	session := getVCenterSession()
+	serversFromVCenter := getPowerStatusFromvCenter(session, "")
 
 	db, err := connectToDB()
 	if err != nil {
 		log.Fatal("Error connecting to database: ", err)
 	}
+	defer db.Close()
 
-	var whereString string = ""
-	if id != "" {
-		whereString = " WHERE id = ?"
-	}
-
-	// Prepare statement for reading data
-	// little silly but it works, and it still is a prepared statement
-	rows, err := db.Query("SELECT id, users_id, vcenter_id, name, description, end_date, operating_system, storage, memory, ip FROM virtual_machines"+whereString, id)
+	rows, err := getServersFromSQL(db, id, user, admin)
 	if err != nil {
 		log.Fatal("Error executing query: ", err)
 	}
 	defer rows.Close()
 
+	rowsArr, err := getPowerStatusRows(rows, serversFromVCenter)
+	if err != nil {
+		log.Fatal("Error scanning row: ", err)
+	}
+
+	if id != "" {
+		if len(rowsArr) > 0 {
+			return c.JSON(http.StatusOK, rowsArr[0])
+		} else {
+			return c.JSON(http.StatusNotFound, "No servers found for the given ID")
+		}
+	}
+
+	return c.JSON(http.StatusOK, rowsArr)
+}
+
+func getServersFromSQL(db *sql.DB, id string, user string, admin bool) (*sql.Rows, error) {
+	if id != "" && !admin {
+		return db.Query("SELECT id, users_id, vcenter_id, name, description, end_date, operating_system, storage, memory, ip FROM virtual_machines WHERE id = ? and users_id = ?", id, user)
+	} else if id != "" && admin {
+		return db.Query("SELECT id, users_id, vcenter_id, name, description, end_date, operating_system, storage, memory, ip FROM virtual_machines WHERE id = ?", id)
+	} else if admin {
+		return db.Query("SELECT id, users_id, vcenter_id, name, description, end_date, operating_system, storage, memory, ip FROM virtual_machines")
+	} else {
+		return db.Query("SELECT id, users_id, vcenter_id, name, description, end_date, operating_system, storage, memory, ip FROM virtual_machines WHERE users_id = ?", user)
+	}
+}
+
+func getPowerStatusRows(rows *sql.Rows, serversFromVCenter []vCenterServers) ([]PowerStatusReturn, error) {
 	var rowsArr []PowerStatusReturn
+	var wg sync.WaitGroup
+	rowChan := make(chan PowerStatusReturn)
+
 	for rows.Next() {
 		var s PowerStatusReturn
-
-		err = rows.Scan(&s.ID, &s.Users_id, &s.Vcenter_id, &s.Name, &s.Description, &s.End_date, &s.Operating_system, &s.Storage, &s.Memory, &s.IP)
+		err := rows.Scan(&s.ID, &s.UsersId, &s.VcenterId, &s.Name, &s.Description, &s.EndDate, &s.OperatingSystem, &s.Storage, &s.Memory, &s.IP)
 		if err != nil {
-			log.Fatal("Error scanning row: ", err)
+			return nil, err
 		}
 
-		s.Power_status = getVCenterPowerState(s.Vcenter_id, serversFromVCenter)
-
-		rowsArr = append(rowsArr, s)
+		wg.Add(1)
+		go func(s PowerStatusReturn) {
+			defer wg.Done()
+			s.PowerStatus = getVCenterPowerState(s.VcenterId, serversFromVCenter)
+			rowChan <- s
+		}(s)
 	}
 
-	// if an id is given, return the first item in the array since there should be only one when an id is given
-	if id != "" {
-		return c.JSON(http.StatusOK, rowsArr[0])
+	go func() {
+		wg.Wait()
+		close(rowChan)
+	}()
+
+	for row := range rowChan {
+		rowsArr = append(rowsArr, row)
 	}
 
-	// return the result as a json object
-	return c.JSON(http.StatusOK, rowsArr)
+	return rowsArr, nil
 }
 
 func getVCenterPowerState(DBId string, VCenterServers []vCenterServers) string {
@@ -137,11 +166,9 @@ func createServer(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "Invalid operating system")
 	}
 
-	var User_id int64 = 1
+	UserId, _ := getUserAssociatedWithJWT(c)
 
-	var UserIdStr = strconv.FormatInt(User_id, 10)
-
-	var vCenterID = createvCenterVM(session, UserIdStr, json.Name, json.OperatingSystem)
+	var vCenterID = createvCenterVM(session, UserId, json.Name, json.OperatingSystem)
 
 	// Insert the new server into the database
 	stmt, err := db.Prepare("INSERT INTO virtual_machines(users_id, vcenter_id, name, description, end_date, operating_system, storage, memory, ip) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
@@ -150,7 +177,7 @@ func createServer(c echo.Context) error {
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(User_id, vCenterID, json.Name, json.Description, endDate, json.OperatingSystem, json.Storage, json.Memory, "")
+	_, err = stmt.Exec(UserId, vCenterID, json.Name, json.Description, endDate, json.OperatingSystem, json.Storage, json.Memory, "")
 	if err != nil {
 		log.Fatal("Error executing statement: ", err)
 	}

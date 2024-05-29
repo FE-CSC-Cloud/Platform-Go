@@ -184,3 +184,39 @@ func removeOldTokensFromDB(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, "Old tokens have been removed")
 }
+
+func getUserAssociatedWithJWT(c echo.Context) (string, bool) {
+	token := formatJWTfromBearer(c)
+
+	// get the JWT secret from the environment
+	jwtSecret := getEnvVar("JWT_SECRET")
+
+	// parse the token
+	t, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+		return []byte(jwtSecret), nil
+	})
+	if err != nil {
+		return "", false
+	}
+
+	// check if the token is valid
+	if !t.Valid {
+		return "", false
+	}
+
+	// check if the token is expired
+	claims, ok := t.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", false
+	}
+
+	if claims["name"] == nil {
+		return "", false
+	}
+
+	if claims["admin"] == nil {
+		return "", false
+	}
+
+	return claims["name"].(string), claims["admin"].(bool)
+}

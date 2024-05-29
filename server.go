@@ -10,16 +10,17 @@ func main() {
 	e := echo.New()
 	e.GET("/", func(c echo.Context) error { return c.String(http.StatusTeapot, "I'm a teapot") })
 
-	// TODO: check if the user is Admin or not and give users only the servers they have access to
-	e.GET("/servers", getServers)
-	// TODO: server aan de requesting user toevoegen
-	e.POST("/servers", createServer)
+	s := e.Group("/servers")
+	s.Use(checkIfLoggedIn)
 
-	e.GET("/servers/:id", getServers)
+	s.GET("", getServers)
+	s.POST("", createServer)
+
+	s.GET("/:id", getServers)
 
 	// TODO: check if the user is Admin or not and give users only the servers they have access to
 	// TODO: Regels uit firewall halen
-	e.DELETE("/servers/:id", deleteServer)
+	s.DELETE("/:id", deleteServer)
 
 	// TODO: array met template IDs cachen (fetchTemplateLibraryIdsFromVCenter)
 	// TODO: JSON het zelfde maken als de Laravel JSON
