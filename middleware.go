@@ -20,10 +20,10 @@ func checkIfLoggedIn(next echo.HandlerFunc) echo.HandlerFunc {
 
 		valid, expired, err := checkJWT(token)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, "Token is invalid")
+			return c.JSON(http.StatusInternalServerError, "Token Invalid")
 		}
 		if !valid {
-			return c.JSON(http.StatusUnauthorized, "Token cannot be verified")
+			return c.JSON(http.StatusUnauthorized, "Token Invalid")
 		}
 		if expired {
 			return c.JSON(http.StatusUnauthorized, "Token is expired")
