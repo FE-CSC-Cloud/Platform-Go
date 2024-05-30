@@ -71,13 +71,13 @@ func connectAndBind(username string, password string) (*ldap.Conn, error) {
 	ldapURL := "ldap://" + getEnvVar("LDAP_HOST") + ":389"
 	ldapConn, err := ldap.DialURL(ldapURL)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to connect to LDAP server")
+		return nil, fmt.Errorf("failed to connect to LDAP server")
 	}
 
 	// Bind with provided username and password to validate the user
 	err = ldapConn.Bind(username+"@"+getEnvVar("LDAP_READ_DOMAIN"), password)
 	if err != nil {
-		return nil, fmt.Errorf("Email or password is incorrect")
+		return nil, fmt.Errorf("email or password is incorrect")
 	}
 
 	return ldapConn, nil
@@ -94,11 +94,11 @@ func fetchGroupsAndDisplayNames(ldapConn *ldap.Conn, username string) ([]string,
 
 	sr, err := ldapConn.Search(searchRequest)
 	if err != nil {
-		return nil, "", fmt.Errorf("Failed to search LDAP server")
+		return nil, "", fmt.Errorf("failed to search LDAP server")
 	}
 
 	if len(sr.Entries) == 0 {
-		return nil, "", fmt.Errorf("No entries found for user %s", username)
+		return nil, "", fmt.Errorf("no entries found for user %s", username)
 	}
 
 	entries := sr.Entries[0]
