@@ -26,28 +26,31 @@ func login(c echo.Context) error {
 
 	ldapConn, err := connectAndBind(username, password)
 	if err != nil {
-		return c.String(http.StatusUnauthorized, err.Error())
+		log.Println(err)
+		return c.String(http.StatusUnauthorized, "Username or password incorrect")
 	}
 	defer ldapConn.Close()
 
-	groups, ye, err := fetchGroupsAndDisplayNames(ldapConn, username)
-	log.Println(ye)
+	groups, fullName, err := fetchGroupsAndDisplayNames(ldapConn, username)
 	if err != nil {
-		return c.String(http.StatusInternalServerError, "Failed to fetch groups")
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, "Login failed")
 	}
 
 	isAdmin := checkIfAdmin(groups)
 
 	// Create a JWT token
-	token, err := generateToken(username, isAdmin)
+	token, err := generateToken(username, fullName, isAdmin)
 	if err != nil {
-		return c.String(http.StatusInternalServerError, "Failed to create token")
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, "Login failed")
 	}
 
 	// Save token in database
 	err = saveTokenInDB(token, username)
 	if err != nil {
-		return c.String(http.StatusInternalServerError, "Failed to save token in database")
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, "Login failed")
 	}
 
 	response := LoginResponse{
@@ -56,7 +59,7 @@ func login(c echo.Context) error {
 			Name    string `json:"name"`
 			IsAdmin bool   `json:"is_admin"`
 		}{
-			Name:    username,
+			Name:    fullName,
 			IsAdmin: isAdmin,
 		},
 	}
@@ -68,27 +71,24 @@ func connectAndBind(username string, password string) (*ldap.Conn, error) {
 	ldapURL := "ldap://" + getEnvVar("LDAP_HOST") + ":389"
 	ldapConn, err := ldap.DialURL(ldapURL)
 	if err != nil {
-		fmt.Println(err)
 		return nil, fmt.Errorf("Failed to connect to LDAP server")
 	}
 
 	// Bind with provided username and password to validate the user
 	err = ldapConn.Bind(username+"@"+getEnvVar("LDAP_READ_DOMAIN"), password)
 	if err != nil {
-		fmt.Println(err, "Bind failed")
 		return nil, fmt.Errorf("Email or password is incorrect")
 	}
 
 	return ldapConn, nil
 }
 
-// TODO: also fetch display name
 func fetchGroupsAndDisplayNames(ldapConn *ldap.Conn, username string) ([]string, string, error) {
 	searchRequest := ldap.NewSearchRequest(
-		"DC=OICLOUD,DC=LOCAL",
+		getEnvVar("LDAP_BASE_DN"),
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
 		fmt.Sprintf("(&(objectClass=user)(sAMAccountName=%s))", username),
-		[]string{"memberOf"},
+		[]string{"memberOf", "givenName", "sn"},
 		nil,
 	)
 
@@ -97,35 +97,58 @@ func fetchGroupsAndDisplayNames(ldapConn *ldap.Conn, username string) ([]string,
 		return nil, "", fmt.Errorf("Failed to search LDAP server")
 	}
 
+	if len(sr.Entries) == 0 {
+		return nil, "", fmt.Errorf("No entries found for user %s", username)
+	}
+
+	entries := sr.Entries[0]
+
+	memberOf := entries.GetAttributeValues("memberOf")
+
+	firstName := entries.GetAttributeValue("givenName")
+	// last name is an array for some reason so we have to check if it exists
+	var lastName = ""
+	if len(entries.GetAttributeValues("sn")) >= 1 {
+		lastName = entries.GetAttributeValues("sn")[0]
+	}
+
+	fullName := firstName + " " + lastName
+
 	var groups []string
 
-	for _, entry := range sr.Entries {
-		for _, attr := range entry.Attributes {
-			for _, value := range attr.Values {
-				group := value[:strings.Index(value, ",")]
-				group = group[3:]
-				groups = append(groups, group)
+	// Get only the CN= and not the OU=
+	for _, dn := range memberOf {
+		// Extract the part of the DN starting with "CN=" and ending before the next comma
+		start := strings.Index(dn, "CN=")
+		if start != -1 {
+			start += 3 // Skip past "CN="
+			end := strings.Index(dn[start:], ",")
+			if end != -1 {
+				groups = append(groups, dn[start:start+end])
+			} else {
+				groups = append(groups, dn[start:])
 			}
 		}
 	}
 
-	return groups, "", err
+	return groups, fullName, err
 }
 
 func checkIfAdmin(groups []string) bool {
 	for _, group := range groups {
-		if group == "Administrators" {
+		if group == "Gilde Members" {
 			return true
 		}
 	}
 	return false
 }
 
-func generateToken(name string, admin bool) (string, error) {
+func generateToken(name string, fullName string, admin bool) (string, error) {
 	// Create JWT token
 	token := jwt.New(jwt.SigningMethodHS256)
 	claims := token.Claims.(jwt.MapClaims)
 	claims["name"] = name
+	claims["givenName"] = fullName
 	claims["admin"] = admin
 	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
 
@@ -152,7 +175,6 @@ func saveTokenInDB(token string, username string) error {
 	// Insert the token into the database
 	_, err = db.Exec("INSERT INTO user_tokens (token, expires_at, belongs_to) VALUES (?, ?, ?)", token, expiresAt, username)
 	if err != nil {
-		log.Println(err)
 		return err
 	}
 
@@ -166,19 +188,16 @@ func removeOldTokensFromDB(c echo.Context) error {
 	// Remove tokens that have expired
 	db, err := connectToDB()
 	if err != nil {
-		log.Println(err)
 		return c.JSON(http.StatusInternalServerError, "Failed to connect to database")
 	}
 
 	_, err = db.Exec("DELETE FROM user_tokens WHERE expires_at < NOW()")
 	if err != nil {
-		log.Println(err)
 		return c.JSON(http.StatusInternalServerError, "Failed to delete old tokens from database")
 	}
 
 	err = db.Close()
 	if err != nil {
-		log.Println(err)
 		return c.JSON(http.StatusInternalServerError, "Failed to close database connection")
 	}
 
