@@ -162,11 +162,16 @@ func createServer(c echo.Context) error {
 
 	// check if the OS exist
 	templates := getTemplatesFromVCenter(session)
-	if checkIfItemIsKeyOfArray(json.OperatingSystem, templates) == false {
+	if !checkIfItemIsKeyOfArray(json.OperatingSystem, templates) {
 		return c.JSON(http.StatusBadRequest, "Invalid operating system")
 	}
 
 	UserId, _ := getUserAssociatedWithJWT(c)
+
+	serverAlreadyExists := checkIfUserAlreadyHasServerWithName(json.Name, UserId, db)
+	if serverAlreadyExists {
+		return c.JSON(http.StatusOK, "Deze naam bestaat al!")
+	}
 
 	var vCenterID = createvCenterVM(session, UserId, json.Name, json.OperatingSystem)
 
@@ -219,4 +224,18 @@ func deleteServer(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, "Server deleted!")
+}
+
+func checkIfUserAlreadyHasServerWithName(name, userID string, db *sql.DB) bool {
+	rows, err := db.Query("SELECT name FROM virtual_machines WHERE name = ? AND users_id = ?", name, userID)
+	if err != nil {
+		log.Println("Could not check if the nane already exists err: ", err)
+		return true
+	}
+
+	if !rows.Next() {
+		return false
+	}
+
+	return true
 }
