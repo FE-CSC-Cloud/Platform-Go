@@ -31,16 +31,17 @@ func login(c echo.Context) error {
 	}
 	defer ldapConn.Close()
 
-	groups, fullName, err := fetchGroupsAndDisplayNames(ldapConn, username)
+	groups, fullName, SID, err := fetchGroupsAndDisplayNames(ldapConn, username)
 	if err != nil {
 		log.Println(err)
 		return c.String(http.StatusInternalServerError, "Login failed")
 	}
+	log.Println(SID)
 
 	isAdmin := checkIfAdmin(groups)
 
 	// Create a JWT token
-	token, err := generateToken(username, fullName, isAdmin)
+	token, err := generateToken(SID, fullName, isAdmin)
 	if err != nil {
 		log.Println(err)
 		return c.String(http.StatusInternalServerError, "Login failed")
@@ -83,33 +84,33 @@ func connectAndBind(username string, password string) (*ldap.Conn, error) {
 	return ldapConn, nil
 }
 
-func fetchGroupsAndDisplayNames(ldapConn *ldap.Conn, username string) ([]string, string, error) {
+func fetchGroupsAndDisplayNames(ldapConn *ldap.Conn, username string) ([]string, string, string, error) {
 	searchRequest := ldap.NewSearchRequest(
 		getEnvVar("LDAP_BASE_DN"),
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
 		fmt.Sprintf("(&(objectClass=user)(sAMAccountName=%s))", username),
-		[]string{"memberOf", "givenName", "sn"},
+		[]string{"memberOf", "givenName", "sn", "objectSid"},
 		nil,
 	)
 
 	sr, err := ldapConn.Search(searchRequest)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to search LDAP server")
+		return nil, "", "", fmt.Errorf("failed to search LDAP server: %v", err)
 	}
 
 	if len(sr.Entries) == 0 {
-		return nil, "", fmt.Errorf("no entries found for user %s", username)
+		return nil, "", "", fmt.Errorf("no entries found for user %s", username)
 	}
 
-	entries := sr.Entries[0]
+	entry := sr.Entries[0]
 
-	memberOf := entries.GetAttributeValues("memberOf")
+	memberOf := entry.GetAttributeValues("memberOf")
 
-	firstName := entries.GetAttributeValue("givenName")
+	firstName := entry.GetAttributeValue("givenName")
 	// last name is an array for some reason so we have to check if it exists
-	var lastName = ""
-	if len(entries.GetAttributeValues("sn")) >= 1 {
-		lastName = entries.GetAttributeValues("sn")[0]
+	var lastName string
+	if len(entry.GetAttributeValues("sn")) >= 1 {
+		lastName = entry.GetAttributeValues("sn")[0]
 	}
 
 	fullName := firstName + " " + lastName
@@ -131,7 +132,31 @@ func fetchGroupsAndDisplayNames(ldapConn *ldap.Conn, username string) ([]string,
 		}
 	}
 
-	return groups, fullName, err
+	// Extract the SID
+	objectSid := entry.GetRawAttributeValue("objectSid")
+	sidString := sidToString(objectSid)
+
+	return groups, fullName, sidString, err
+}
+
+func sidToString(sid []byte) string {
+	// Convert the SID from byte format to a readable string format
+	if len(sid) < 8 {
+		return ""
+	}
+	// Version is the first byte
+	revision := sid[0]
+	// Sub-authority count is the second byte
+	subAuthorityCount := sid[1]
+	// Authority is the next 6 bytes
+	authority := uint64(sid[2])<<40 | uint64(sid[3])<<32 | uint64(sid[4])<<24 | uint64(sid[5])<<16 | uint64(sid[6])<<8 | uint64(sid[7])
+	sidString := fmt.Sprintf("S-%d-%d", revision, authority)
+	// Sub-authorities are the rest of the bytes
+	for i := 0; i < int(subAuthorityCount); i++ {
+		subAuth := uint32(sid[8+4*i]) | uint32(sid[8+4*i+1])<<8 | uint32(sid[8+4*i+2])<<16 | uint32(sid[8+4*i+3])<<24
+		sidString += fmt.Sprintf("-%d", subAuth)
+	}
+	return sidString
 }
 
 func checkIfAdmin(groups []string) bool {
@@ -143,11 +168,11 @@ func checkIfAdmin(groups []string) bool {
 	return false
 }
 
-func generateToken(name string, fullName string, admin bool) (string, error) {
+func generateToken(SID string, fullName string, admin bool) (string, error) {
 	// Create JWT token
 	token := jwt.New(jwt.SigningMethodHS256)
 	claims := token.Claims.(jwt.MapClaims)
-	claims["name"] = name
+	claims["sid"] = SID
 	claims["givenName"] = fullName
 	claims["admin"] = admin
 	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
@@ -229,7 +254,7 @@ func getUserAssociatedWithJWT(c echo.Context) (string, bool) {
 		return "", false
 	}
 
-	if claims["name"] == nil {
+	if claims["sid"] == nil {
 		return "", false
 	}
 
@@ -237,5 +262,5 @@ func getUserAssociatedWithJWT(c echo.Context) (string, bool) {
 		return "", false
 	}
 
-	return claims["name"].(string), claims["admin"].(bool)
+	return claims["sid"].(string), claims["admin"].(bool)
 }

@@ -47,7 +47,7 @@ type PowerStatusReturn struct {
 
 func getServers(c echo.Context) error {
 	id := c.Param("id")
-	user, admin := getUserAssociatedWithJWT(c)
+	SID, admin := getUserAssociatedWithJWT(c)
 	session := getVCenterSession()
 	serversFromVCenter := getPowerStatusFromvCenter(session, "")
 
@@ -57,7 +57,7 @@ func getServers(c echo.Context) error {
 	}
 	defer db.Close()
 
-	rows, err := getServersFromSQL(db, id, user, admin)
+	rows, err := getServersFromSQL(db, id, SID, admin)
 	if err != nil {
 		log.Fatal("Error executing query: ", err)
 	}
