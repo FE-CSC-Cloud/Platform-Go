@@ -53,6 +53,9 @@ func main() {
 	e.GET("/templates", getTemplates)
 
 	g := e.Group("/admin")
+
+	g.POST("/ipAdresses", createIpAdress)
+
 	g.Use(checkIfLoggedIn)
 
 	// force the templates to be recached

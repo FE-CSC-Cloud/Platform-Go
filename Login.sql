@@ -42,7 +42,7 @@ CREATE TABLE `user_tokens` (
 
 CREATE TABLE `virtual_machines` (
   `id` bigint NOT NULL,
-  `users_id` varchar(255) NOT NULL,
+  `users_id` text NOT NULL,
   `vcenter_id` varchar(255) NOT NULL,
   `name` varchar(100) NOT NULL,
   `description` text NOT NULL,
@@ -54,6 +54,13 @@ CREATE TABLE `virtual_machines` (
   `deleted_at` timestamp NULL DEFAULT NULL,
   `created_at` text,
   `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `ip_adresses` (
+  `ip` varchar(15) NOT NULL,
+  `virtual_machines_id` bigint NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -71,6 +78,12 @@ ALTER TABLE `user_tokens`
 --
 ALTER TABLE `virtual_machines`
   ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `ip_adresses`
+--
+ALTER TABLE `ip_adresses`
+    ADD PRIMARY KEY(`ip`);
 
 --
 -- AUTO_INCREMENT for table `virtual_machines`
