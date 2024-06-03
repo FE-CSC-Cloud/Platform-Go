@@ -63,6 +63,15 @@ CREATE TABLE `ip_adresses` (
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE `tickets` (
+    `id` bigint NOT NULL,
+    `title` varchar(255) NOT NULL,
+    `user_id` bigint NOT NULL,
+    `message` text NOT NULL,
+    `status` enum('Pending', 'Accepted', 'Rejected') NOT NULL,
+    `response` text NOT NULL,
+    `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 --
 -- Indexes for dumped tables
 --
@@ -78,6 +87,8 @@ ALTER TABLE `user_tokens`
 --
 ALTER TABLE `virtual_machines`
   ADD PRIMARY KEY (`id`);
+ALTER TABLE `virtual_machines`
+    MODIFY `id` bigint NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- Indexes for table `ip_adresses`
@@ -85,11 +96,11 @@ ALTER TABLE `virtual_machines`
 ALTER TABLE `ip_adresses`
     ADD PRIMARY KEY(`ip`);
 
---
--- AUTO_INCREMENT for table `virtual_machines`
---
-ALTER TABLE `virtual_machines`
-  MODIFY `id` bigint NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
+ALTER TABLE `tickets`
+    ADD PRIMARY KEY(`id`);
+ALTER Table `tickets`
+    MODIFY `id` bigint NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
+
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
