@@ -58,7 +58,7 @@ CREATE TABLE `virtual_machines` (
 
 CREATE TABLE `ip_adresses` (
   `ip` varchar(15) NOT NULL,
-  `virtual_machines_id` bigint NULL,
+  `virtual_machine_id` bigint NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

@@ -45,6 +45,15 @@ type PowerStatusReturn struct {
 	PowerStatus     string
 }
 
+type jsonBody struct {
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	OperatingSystem string `json:"operating_system"`
+	EndDate         string `json:"end_date"`
+	Storage         int    `json:"storage"`
+	Memory          int    `json:"memory"`
+}
+
 func getServers(c echo.Context) error {
 	id := c.Param("id")
 	SID, admin := getUserAssociatedWithJWT(c)
@@ -62,6 +71,11 @@ func getServers(c echo.Context) error {
 		log.Fatal("Error executing query: ", err)
 	}
 	defer rows.Close()
+
+	ip := findEmptyIp()
+	if ip == "" {
+		return c.JSON(http.StatusBadRequest, "No IP addresses available")
+	}
 
 	rowsArr, err := getPowerStatusRows(rows, serversFromVCenter)
 	if err != nil {
@@ -134,60 +148,77 @@ func getVCenterPowerState(DBId string, VCenterServers []vCenterServers) string {
 }
 
 func createServer(c echo.Context) error {
-	type jsonBody struct {
-		Name            string `json:"name"`
-		Description     string `json:"description"`
-		OperatingSystem string `json:"operating_system"`
-		EndDate         string `json:"end_date"`
-		Storage         int    `json:"storage"`
-		Memory          int    `json:"memory"`
+	json := new(jsonBody)
+	err := c.Bind(&json)
+	if err != nil {
+		log.Println("Error binding JSON: ", err)
+		return c.JSON(http.StatusBadRequest, "Invalid JSON")
 	}
 
-	session := getVCenterSession()
 	db, err := connectToDB()
 	if err != nil {
 		log.Fatal("Error connecting to database: ", err)
 	}
 
-	json := new(jsonBody)
-	if err := c.Bind(&json); err != nil {
-		return err
-	}
+	session := getVCenterSession()
 
-	// check if the date is in the correct format (YYYY-MM-DD)
-	var endDate, errDate = time.Parse("2006-01-02", json.EndDate)
-	if errDate != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid date format, please use YYYY-MM-DD")
-	}
-
-	// check if the OS exist
-	templates := getTemplatesFromVCenter(session)
-	if !checkIfItemIsKeyOfArray(json.OperatingSystem, templates) {
-		return c.JSON(http.StatusBadRequest, "Invalid operating system")
+	valid, errMessage, endDate := validateServerCreation(json, session)
+	if !valid {
+		return c.JSON(http.StatusBadRequest, errMessage)
 	}
 
 	UserId, _ := getUserAssociatedWithJWT(c)
 
 	serverAlreadyExists := checkIfUserAlreadyHasServerWithName(json.Name, UserId, db)
 	if serverAlreadyExists {
-		return c.JSON(http.StatusOK, "Deze naam bestaat al!")
+		return c.JSON(http.StatusOK, "Deze naam bestaat al voor jouw!")
 	}
 
+	err = createServerInDB(UserId, json, endDate, session, db)
+	if err != nil {
+		log.Fatal("Error creating server: ", err)
+	}
+
+	return c.JSON(http.StatusCreated, "Server gemaakt!")
+}
+
+func createServerInDB(UserId string, json *jsonBody, endDate time.Time, session string, db *sql.DB) error {
 	var vCenterID = createvCenterVM(session, UserId, json.Name, json.OperatingSystem)
 
 	// Insert the new server into the database
 	stmt, err := db.Prepare("INSERT INTO virtual_machines(users_id, vcenter_id, name, description, end_date, operating_system, storage, memory, ip) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
-		log.Fatal("Error preparing statement: ", err)
+		return err
 	}
 	defer stmt.Close()
 
 	_, err = stmt.Exec(UserId, vCenterID, json.Name, json.Description, endDate, json.OperatingSystem, json.Storage, json.Memory, "")
 	if err != nil {
-		log.Fatal("Error executing statement: ", err)
+		return err
 	}
 
-	return c.JSON(http.StatusCreated, "Server gemaakt!")
+	return nil
+}
+
+func validateServerCreation(json *jsonBody, session string) (bool, string, time.Time) {
+	// check if the date is in the correct format (YYYY-MM-DD)
+	var endDate, errDate = time.Parse("2006-01-02", json.EndDate)
+	if errDate != nil {
+		return false, "Invalid date format, please use YYYY-MM-DD", time.Time{}
+	}
+
+	// check if the end date is in the future
+	if endDate.Before(time.Now()) {
+		return false, "End date in the past", time.Time{}
+	}
+
+	// check if the OS exist
+	templates := getTemplatesFromVCenter(session)
+	if !checkIfItemIsKeyOfArray(json.OperatingSystem, templates) {
+		return false, "Invalid operating system", time.Time{}
+	}
+
+	return true, "", endDate
 }
 
 func deleteServer(c echo.Context) error {
