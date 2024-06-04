@@ -3,8 +3,11 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 )
 
 func createIPHostInSopohos(ip string) {
@@ -12,33 +15,54 @@ func createIPHostInSopohos(ip string) {
 
 	resp := doAuthenticatedSophosRequest("")
 	log.Println(resp.Status)
+
+	// parse response
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Print the response body
+	log.Println(string(body))
+
+	defer resp.Body.Close()
 }
 
 func doAuthenticatedSophosRequest(xml string) *http.Response {
 	var requestXML string = fmt.Sprintf(`
-            <Request>
-                <Login>
-                    <Username>%s</Username>
-                    <Password>%s</Password>
-                </Login>
-                %s
-            </Request>`, getEnvVar("SOPHOS_FIREWALL_USER"), getEnvVar("SOPHOS_FIREWALL_PASS"), xml)
+                    <Request>
+                        <Login>
+                            <Username>%s</Username> 
+                            <Password>%s</Password>
+                        </Login>%s
+                    </Request>`,
+		getEnvVar("SOPHOS_FIREWALL_USER"), getEnvVar("SOPHOS_FIREWALL_PASS"), xml)
 
 	firewallURL := getEnvVar("SOPHOS_FIREWALL_URL")
 
 	// Create a new HTTP client with disabled SSL verification
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: getBoolEnvVar("VERIFY_TLS")},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: !getBoolEnvVar("VERIFY_TLS")},
 	}
 	client := &http.Client{Transport: tr}
 
-	// Send the GET request
-	resp, err := client.Get(firewallURL + requestXML)
+	log.Println("Sending request to Sophos: ", requestXML)
+	// Create a new request
+	req, err := http.NewRequest("POST", firewallURL, strings.NewReader(url.Values{"reqxml": {requestXML}}.Encode()))
+	if err != nil {
+		log.Println("Error creating request: ", err)
+		return nil
+	}
+
+	// Set the content type to application/x-www-form-urlencoded
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	// Send the request
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Println("Error sending request to Sophos: ", err)
 		return nil
 	}
-	defer resp.Body.Close()
 
 	return resp
 }

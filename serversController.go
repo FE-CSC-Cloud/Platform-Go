@@ -148,36 +148,37 @@ func getVCenterPowerState(DBId string, VCenterServers []vCenterServers) string {
 }
 
 func createServer(c echo.Context) error {
-	json := new(jsonBody)
-	err := c.Bind(&json)
-	if err != nil {
-		log.Println("Error binding JSON: ", err)
-		return c.JSON(http.StatusBadRequest, "Invalid JSON")
-	}
+	createIPHostInSopohos("192.168.1.1")
+	/*	json := new(jsonBody)
+		err := c.Bind(&json)
+		if err != nil {
+			log.Println("Error binding JSON: ", err)
+			return c.JSON(http.StatusBadRequest, "Invalid JSON")
+		}
 
-	db, err := connectToDB()
-	if err != nil {
-		log.Fatal("Error connecting to database: ", err)
-	}
+		db, err := connectToDB()
+		if err != nil {
+			log.Fatal("Error connecting to database: ", err)
+		}
 
-	session := getVCenterSession()
+		session := getVCenterSession()
 
-	valid, errMessage, endDate := validateServerCreation(json, session)
-	if !valid {
-		return c.JSON(http.StatusBadRequest, errMessage)
-	}
+		valid, errMessage, endDate := validateServerCreation(json, session)
+		if !valid {
+			return c.JSON(http.StatusBadRequest, errMessage)
+		}
 
-	UserId, _ := getUserAssociatedWithJWT(c)
+		UserId, _ := getUserAssociatedWithJWT(c)
 
-	serverAlreadyExists := checkIfUserAlreadyHasServerWithName(json.Name, UserId, db)
-	if serverAlreadyExists {
-		return c.JSON(http.StatusOK, "Deze naam bestaat al voor jouw!")
-	}
+		serverAlreadyExists := checkIfUserAlreadyHasServerWithName(json.Name, UserId, db)
+		if serverAlreadyExists {
+			return c.JSON(http.StatusOK, "Deze naam bestaat al voor jouw!")
+		}
 
-	err = createServerInDB(UserId, json, endDate, session, db)
-	if err != nil {
-		log.Fatal("Error creating server: ", err)
-	}
+		err = createServerInDB(UserId, json, endDate, session, db)
+		if err != nil {
+			log.Fatal("Error creating server: ", err)
+		}*/
 
 	return c.JSON(http.StatusCreated, "Server gemaakt!")
 }
