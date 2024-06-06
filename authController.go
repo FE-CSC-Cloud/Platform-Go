@@ -31,17 +31,16 @@ func login(c echo.Context) error {
 	}
 	defer ldapConn.Close()
 
-	groups, fullName, SID, err := fetchGroupsAndDisplayNames(ldapConn, username)
+	groups, fullName, studentId, SID, err := fetchUserInfo(ldapConn, username)
 	if err != nil {
 		log.Println(err)
 		return c.String(http.StatusInternalServerError, "Login failed")
 	}
-	log.Println(SID)
 
 	isAdmin := checkIfAdmin(groups)
 
 	// Create a JWT token
-	token, err := generateToken(SID, fullName, isAdmin)
+	token, err := generateToken(SID, fullName, studentId, isAdmin)
 	if err != nil {
 		log.Println(err)
 		return c.String(http.StatusInternalServerError, "Login failed")
@@ -84,22 +83,22 @@ func connectAndBind(username string, password string) (*ldap.Conn, error) {
 	return ldapConn, nil
 }
 
-func fetchGroupsAndDisplayNames(ldapConn *ldap.Conn, username string) ([]string, string, string, error) {
+func fetchUserInfo(ldapConn *ldap.Conn, username string) ([]string, string, string, string, error) {
 	searchRequest := ldap.NewSearchRequest(
 		getEnvVar("LDAP_BASE_DN"),
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
 		fmt.Sprintf("(&(objectClass=user)(sAMAccountName=%s))", username),
-		[]string{"memberOf", "givenName", "sn", "objectSid"},
+		[]string{"memberOf", "givenName", "description", "sn", "objectSid"},
 		nil,
 	)
 
 	sr, err := ldapConn.Search(searchRequest)
 	if err != nil {
-		return nil, "", "", fmt.Errorf("failed to search LDAP server: %v", err)
+		return nil, "", "", "", fmt.Errorf("failed to search LDAP server: %v", err)
 	}
 
 	if len(sr.Entries) == 0 {
-		return nil, "", "", fmt.Errorf("no entries found for user %s", username)
+		return nil, "", "", "", fmt.Errorf("no entries found for user %s", username)
 	}
 
 	entry := sr.Entries[0]
@@ -107,6 +106,8 @@ func fetchGroupsAndDisplayNames(ldapConn *ldap.Conn, username string) ([]string,
 	memberOf := entry.GetAttributeValues("memberOf")
 
 	firstName := entry.GetAttributeValue("givenName")
+
+	description := entry.GetAttributeValue("description")
 	// last name is an array for some reason so we have to check if it exists
 	var lastName string
 	if len(entry.GetAttributeValues("sn")) >= 1 {
@@ -136,7 +137,7 @@ func fetchGroupsAndDisplayNames(ldapConn *ldap.Conn, username string) ([]string,
 	objectSid := entry.GetRawAttributeValue("objectSid")
 	sidString := sidToString(objectSid)
 
-	return groups, fullName, sidString, err
+	return groups, fullName, description, sidString, err
 }
 
 func sidToString(sid []byte) string {
@@ -168,12 +169,13 @@ func checkIfAdmin(groups []string) bool {
 	return false
 }
 
-func generateToken(SID string, fullName string, admin bool) (string, error) {
+func generateToken(SID string, fullName string, studentId string, admin bool) (string, error) {
 	// Create JWT token
 	token := jwt.New(jwt.SigningMethodHS256)
 	claims := token.Claims.(jwt.MapClaims)
 	claims["sid"] = SID
 	claims["givenName"] = fullName
+	claims["studentId"] = studentId
 	claims["admin"] = admin
 	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
 
@@ -229,7 +231,7 @@ func removeOldTokensFromDB(c echo.Context) error {
 	return c.JSON(http.StatusOK, "Old tokens have been removed")
 }
 
-func getUserAssociatedWithJWT(c echo.Context) (string, bool) {
+func getUserAssociatedWithJWT(c echo.Context) (string, bool, string, string) {
 	token := formatJWTfromBearer(c)
 
 	// get the JWT secret from the environment
@@ -240,27 +242,35 @@ func getUserAssociatedWithJWT(c echo.Context) (string, bool) {
 		return []byte(jwtSecret), nil
 	})
 	if err != nil {
-		return "", false
+		return "", false, "", ""
 	}
 
 	// check if the token is valid
 	if !t.Valid {
-		return "", false
+		return "", false, "", ""
 	}
 
 	// check if the token is expired
 	claims, ok := t.Claims.(jwt.MapClaims)
 	if !ok {
-		return "", false
+		return "", false, "", ""
 	}
 
 	if claims["sid"] == nil {
-		return "", false
+		return "", false, "", ""
 	}
 
 	if claims["admin"] == nil {
-		return "", false
+		return "", false, "", ""
 	}
 
-	return claims["sid"].(string), claims["admin"].(bool)
+	if claims["givenName"] == nil {
+		return "", false, "", ""
+	}
+
+	if claims["studentId"] == nil {
+		return "", false, "", ""
+	}
+
+	return claims["sid"].(string), claims["admin"].(bool), claims["givenName"].(string), claims["studentId"].(string)
 }

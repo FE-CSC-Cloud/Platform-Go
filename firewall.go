@@ -2,19 +2,51 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 )
 
-func createIPHostInSopohos(ip string) {
+type IpConfig struct {
+	Min              string   `json:"min"`
+	Max              string   `json:"max"`
+	Excluded         []string `json:"excluded"`
+	SourceNetworks   []string `json:"sourceNetworks"`
+	Services         []string `json:"services"`
+	OutboundServices []string `json:"outboundServices"`
+}
+
+var (
+	minIp            uint32
+	maxIp            uint32
+	excluded         []uint32
+	sourceNetworks   string
+	inboundServices  string
+	outboundServices string
+)
+
+func createIPHostInSopohos(ip, name, studentID string) {
 	log.Println("Creating IP host in Sophos")
 
-	resp := doAuthenticatedSophosRequest("")
-	log.Println(resp.Status)
+	name = strings.ReplaceAll(name, " ", "_")
+
+	// TODO: Remove TESTfay from the name
+	requestXML := fmt.Sprintf(`
+                    <Set operation="add">
+                		<IPHost>
+                			<Name>OICT-AUTO-HOST-%s-%s-TESTfay</Name>
+                			<HostType>IP</HostType>
+                			<IPAddress>%s</IPAddress>
+                		</IPHost>
+                	</Set>`, studentID, name, ip)
+
+	resp := doAuthenticatedSophosRequest(requestXML)
 
 	// parse response
 	body, err := ioutil.ReadAll(resp.Body)
@@ -26,6 +58,173 @@ func createIPHostInSopohos(ip string) {
 	log.Println(string(body))
 
 	defer resp.Body.Close()
+}
+
+func createInBoundRuleInSophos(studentId, name string) error {
+	log.Println("Creating inbound rule in Sophos")
+
+	name = strings.ReplaceAll(name, " ", "_")
+
+	// TODO: SourceNetworks and Services are empty, have to be filled with the correct values
+	xml := fmt.Sprintf(`
+                        <Set operation="add">
+                            <FirewallRule>
+                                <Name>OICT-AUTO-Inbound-%s-%s</Name>
+                                <Position>bottom</Position>
+                                <PolicyType>Network</PolicyType>
+                                <NetworkPolicy>
+                                    <Action>Accept</Action>
+                                    <SourceZones>
+                                        <Zone>LAN</Zone>
+                                        <Zone>WAN</Zone>
+                                    </SourceZones>
+                                    <SourceNetworks>
+                                        %s
+                                    </SourceNetworks>
+                                    <Services>
+                                        %s
+                                    </Services>
+                                    <DestinationZones>
+                                        <Zone>DMZ</Zone>
+                                    </DestinationZones>
+                                    <DestinationNetworks>
+                                        <Network>OICT-AUTO-HOST-%s-%s</Network>
+                                    </DestinationNetworks>
+                                </NetworkPolicy>
+                            </FirewallRule>
+                        </Set>`, studentId, name, sourceNetworks, inboundServices, studentId, name)
+
+	resp := doAuthenticatedSophosRequest(xml)
+
+	// parse response
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Print the response body
+	log.Println(string(body))
+
+	return nil
+}
+
+func createOutBoundRuleInSophos(studentId, name string) error {
+	log.Println("Creating outbound rule in Sophos")
+
+	name = strings.ReplaceAll(name, " ", "-")
+
+	// TODO: Services are empty, have to be filled with the correct values
+	xml := fmt.Sprintf(`
+                        <Set operation="add">
+                            <FirewallRule>
+                                <Name>OICT-AUTO-Outbound-%s-%s</Name>
+                                <Position>bottom</Position>
+                                <PolicyType>Network</PolicyType>
+                                <NetworkPolicy>
+                                    <Action>Accept</Action>
+                                    <SourceZones>
+                                        <Zone>DMZ</Zone>
+                                        <Zone>LAN</Zone>
+                                    </SourceZones>
+                                    <SourceNetworks>
+                                        <Network>OICT-AUTO-HOST-%s-%s</Network>
+                                    </SourceNetworks>
+                                    <Services>
+                                        %s
+                                    </Services>
+                                    <DestinationZones>
+                                        <Zone>WAN</Zone>
+                                    </DestinationZones>
+                                    <DestinationNetworks>
+                                    </DestinationNetworks>
+                                </NetworkPolicy>
+                            </FirewallRule>
+                        </Set>`, studentId, name, outboundServices, studentId, name)
+
+	resp := doAuthenticatedSophosRequest(xml)
+
+	// parse response
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Print the response body
+	log.Println(string(body))
+
+	return nil
+}
+
+func updateFirewallRuleGroupInSophos(studentId, name string) {
+	log.Println("Updating firewall rule group in Sophos")
+
+	name = strings.ReplaceAll(name, " ", "-")
+
+	xml := fmt.Sprintf(`
+                    <Set operation="update">
+                        <FirewallRuleGroup>
+                            <Name>Autonet</Name>
+                            <SecurityPolicyList>
+                                <SecurityPolicy>OICT-AUTO-Inbound-%s-%s</SecurityPolicy>
+                                <SecurityPolicy>OICT-AUTO-Outbound-%s-%s</SecurityPolicy>
+                            </SecurityPolicyList>
+                        </FirewallRuleGroup>
+                    </Set>`, studentId, name, studentId, name)
+
+	resp := doAuthenticatedSophosRequest(xml)
+
+	// parse response
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Print the response body
+	log.Println(string(body))
+
+	defer resp.Body.Close()
+
+}
+
+func parseAndSetIpListForSophos() {
+	jsonFile, err := os.Open(getEnvVar("IP_LIST"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer jsonFile.Close()
+
+	byteValue, _ := ioutil.ReadAll(jsonFile)
+
+	var ipConfig IpConfig
+	json.Unmarshal(byteValue, &ipConfig)
+
+	minIp = ip2long(ipConfig.Min)
+	maxIp = ip2long(ipConfig.Max)
+
+	if minIp > maxIp {
+		log.Fatal("Minimum IP cannot be higher than maximum IP")
+	}
+
+	for _, value := range ipConfig.Excluded {
+		excluded = append(excluded, ip2long(value))
+	}
+
+	for _, value := range ipConfig.SourceNetworks {
+		sourceNetworks += "<Network>" + value + "</Network>"
+	}
+
+	for _, value := range ipConfig.Services {
+		inboundServices += "<Service>" + value + "</Service>"
+	}
+
+	for _, value := range ipConfig.OutboundServices {
+		outboundServices += "<Service>" + value + "</Service>"
+	}
+}
+
+func ip2long(ip string) uint32 {
+	ipLong, _ := strconv.ParseUint(strings.Join(strings.Split(ip, "."), ""), 10, 32)
+	return uint32(ipLong)
 }
 
 func doAuthenticatedSophosRequest(xml string) *http.Response {

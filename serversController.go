@@ -56,7 +56,7 @@ type jsonBody struct {
 
 func getServers(c echo.Context) error {
 	id := c.Param("id")
-	SID, admin := getUserAssociatedWithJWT(c)
+	UserId, admin, _, _ := getUserAssociatedWithJWT(c)
 	session := getVCenterSession()
 	serversFromVCenter := getPowerStatusFromvCenter(session, "")
 
@@ -66,7 +66,7 @@ func getServers(c echo.Context) error {
 	}
 	defer db.Close()
 
-	rows, err := getServersFromSQL(db, id, SID, admin)
+	rows, err := getServersFromSQL(db, id, UserId, admin)
 	if err != nil {
 		log.Fatal("Error executing query: ", err)
 	}
@@ -148,7 +148,19 @@ func getVCenterPowerState(DBId string, VCenterServers []vCenterServers) string {
 }
 
 func createServer(c echo.Context) error {
-	createIPHostInSopohos("192.168.1.1")
+	_, _, Name, StudentID := getUserAssociatedWithJWT(c)
+
+	parseAndSetIpListForSophos()
+	createIPHostInSopohos("145.89.192.231", Name, StudentID)
+	err := createInBoundRuleInSophos(StudentID, Name)
+	if err != nil {
+		return err
+	}
+
+	_ = createOutBoundRuleInSophos(StudentID, Name)
+
+	updateFirewallRuleGroupInSophos(StudentID, Name)
+
 	/*	json := new(jsonBody)
 		err := c.Bind(&json)
 		if err != nil {

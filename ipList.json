@@ -1,0 +1,8 @@
+{
+    "min":"145.89.192.50",
+    "max":"145.89.192.254",
+    "excluded": [],
+    "sourceNetworks": ["OICT Lokalen", "Students Private IP's"],
+    "services": ["SSH", "HTTP", "HTTPS"],
+    "outboundServices" : ["DNS", "HTTP", "HTTPS", "NTP", "SSH"]
+}

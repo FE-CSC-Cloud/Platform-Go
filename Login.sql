@@ -28,7 +28,7 @@ SET time_zone = "+00:00";
 --
 
 CREATE TABLE `user_tokens` (
-  `token` varchar(255) NOT NULL,
+  `token` varchar(512) NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `expires_at` timestamp NOT NULL,
   `belongs_to` varchar(255) NOT NULL
