@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -148,18 +149,28 @@ func getVCenterPowerState(DBId string, VCenterServers []vCenterServers) string {
 }
 
 func createServer(c echo.Context) error {
-	_, _, Name, StudentID := getUserAssociatedWithJWT(c)
+	_, _, name, StudentID := getUserAssociatedWithJWT(c)
+
+	nameWithoutSpace := strings.ReplaceAll(name, " ", "-")
 
 	parseAndSetIpListForSophos()
-	createIPHostInSopohos("145.89.192.231", Name, StudentID)
-	err := createInBoundRuleInSophos(StudentID, Name)
+	err := createIPHostInSopohos("145.89.192.231", nameWithoutSpace, StudentID)
 	if err != nil {
-		return err
+		log.Println("Error creating IP host: ", err)
+		return c.JSON(http.StatusInternalServerError, "Kon server niet aan firewall toevoegen")
 	}
 
-	_ = createOutBoundRuleInSophos(StudentID, Name)
+	err = createSophosFirewallRules(StudentID, nameWithoutSpace)
+	if err != nil {
+		log.Println("Error creating IP host: ", err)
+		return c.JSON(http.StatusInternalServerError, "Kon server niet aan firewall toevoegen")
+	}
 
-	updateFirewallRuleGroupInSophos(StudentID, Name)
+	err = updateFirewallRuleGroupInSophos(StudentID, nameWithoutSpace)
+	if err != nil {
+		log.Println("Error creating IP host: ", err)
+		return c.JSON(http.StatusInternalServerError, "Kon server niet aan firewall toevoegen")
+	}
 
 	/*	json := new(jsonBody)
 		err := c.Bind(&json)
@@ -182,7 +193,7 @@ func createServer(c echo.Context) error {
 
 		UserId, _ := getUserAssociatedWithJWT(c)
 
-		serverAlreadyExists := checkIfUserAlreadyHasServerWithName(json.Name, UserId, db)
+		serverAlreadyExists := checkIfUserAlreadyHasServerWithName(json.name, UserId, db)
 		if serverAlreadyExists {
 			return c.JSON(http.StatusOK, "Deze naam bestaat al voor jouw!")
 		}

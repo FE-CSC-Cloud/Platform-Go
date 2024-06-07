@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 type IpConfig struct {
@@ -31,16 +32,11 @@ var (
 	outboundServices string
 )
 
-func createIPHostInSopohos(ip, name, studentID string) {
-	log.Println("Creating IP host in Sophos")
-
-	name = strings.ReplaceAll(name, " ", "_")
-
-	// TODO: Remove TESTfay from the name
+func createIPHostInSopohos(ip, name, studentID string) error {
 	requestXML := fmt.Sprintf(`
                     <Set operation="add">
                 		<IPHost>
-                			<Name>OICT-AUTO-HOST-%s-%s-TESTfay</Name>
+                			<Name>OICT-AUTO-HOST-%s-%s</Name>
                 			<HostType>IP</HostType>
                 			<IPAddress>%s</IPAddress>
                 		</IPHost>
@@ -54,18 +50,46 @@ func createIPHostInSopohos(ip, name, studentID string) {
 		log.Fatal(err)
 	}
 
-	// Print the response body
-	log.Println(string(body))
+	// check if the response is an error
+	if !strings.Contains(string(body), `<Status code="200">`) {
+		return fmt.Errorf("error creating IP host in Sophos: %s", string(body))
+	}
 
 	defer resp.Body.Close()
+
+	return nil
+}
+
+func createSophosFirewallRules(studentID, name string) error {
+	var wg sync.WaitGroup
+	var err error
+
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		err = createInBoundRuleInSophos(studentID, name)
+		if err != nil {
+			log.Println("Error creating IP host: ", err)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		err = createOutBoundRuleInSophos(studentID, name)
+		if err != nil {
+			log.Println("Error creating IP host: ", err)
+		}
+	}()
+
+	go func() {
+		wg.Wait()
+	}()
+
+	return err
 }
 
 func createInBoundRuleInSophos(studentId, name string) error {
-	log.Println("Creating inbound rule in Sophos")
-
-	name = strings.ReplaceAll(name, " ", "_")
-
-	// TODO: SourceNetworks and Services are empty, have to be filled with the correct values
 	xml := fmt.Sprintf(`
                         <Set operation="add">
                             <FirewallRule>
@@ -102,18 +126,15 @@ func createInBoundRuleInSophos(studentId, name string) error {
 		log.Fatal(err)
 	}
 
-	// Print the response body
-	log.Println(string(body))
+	// check if the response is an error
+	if !strings.Contains(string(body), `<Status code="200">`) {
+		return fmt.Errorf("error creating IP host in Sophos: %s", string(body))
+	}
 
 	return nil
 }
 
 func createOutBoundRuleInSophos(studentId, name string) error {
-	log.Println("Creating outbound rule in Sophos")
-
-	name = strings.ReplaceAll(name, " ", "-")
-
-	// TODO: Services are empty, have to be filled with the correct values
 	xml := fmt.Sprintf(`
                         <Set operation="add">
                             <FirewallRule>
@@ -127,7 +148,7 @@ func createOutBoundRuleInSophos(studentId, name string) error {
                                         <Zone>LAN</Zone>
                                     </SourceZones>
                                     <SourceNetworks>
-                                        <Network>OICT-AUTO-HOST-%s-%s</Network>
+                                        %s
                                     </SourceNetworks>
                                     <Services>
                                         %s
@@ -139,7 +160,7 @@ func createOutBoundRuleInSophos(studentId, name string) error {
                                     </DestinationNetworks>
                                 </NetworkPolicy>
                             </FirewallRule>
-                        </Set>`, studentId, name, outboundServices, studentId, name)
+                        </Set>`, studentId, name, sourceNetworks, outboundServices)
 
 	resp := doAuthenticatedSophosRequest(xml)
 
@@ -149,17 +170,15 @@ func createOutBoundRuleInSophos(studentId, name string) error {
 		log.Fatal(err)
 	}
 
-	// Print the response body
-	log.Println(string(body))
+	// check if the response is an error
+	if !strings.Contains(string(body), `<Status code="200">`) {
+		return fmt.Errorf("error creating IP host in Sophos: %s", string(body))
+	}
 
 	return nil
 }
 
-func updateFirewallRuleGroupInSophos(studentId, name string) {
-	log.Println("Updating firewall rule group in Sophos")
-
-	name = strings.ReplaceAll(name, " ", "-")
-
+func updateFirewallRuleGroupInSophos(studentId, name string) error {
 	xml := fmt.Sprintf(`
                     <Set operation="update">
                         <FirewallRuleGroup>
@@ -179,11 +198,14 @@ func updateFirewallRuleGroupInSophos(studentId, name string) {
 		log.Fatal(err)
 	}
 
-	// Print the response body
-	log.Println(string(body))
+	// check if the response is an error
+	if !strings.Contains(string(body), `<Status code="200">`) {
+		return fmt.Errorf("error creating IP host in Sophos: %s", string(body))
+	}
 
 	defer resp.Body.Close()
 
+	return nil
 }
 
 func parseAndSetIpListForSophos() {
@@ -245,7 +267,6 @@ func doAuthenticatedSophosRequest(xml string) *http.Response {
 	}
 	client := &http.Client{Transport: tr}
 
-	log.Println("Sending request to Sophos: ", requestXML)
 	// Create a new request
 	req, err := http.NewRequest("POST", firewallURL, strings.NewReader(url.Values{"reqxml": {requestXML}}.Encode()))
 	if err != nil {
