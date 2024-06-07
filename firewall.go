@@ -32,7 +32,7 @@ var (
 	outboundServices string
 )
 
-func createIPHostInSopohos(ip, name, studentID string) error {
+func createIPHostInSopohos(ip, studentID, name string) error {
 	requestXML := fmt.Sprintf(`
                     <Set operation="add">
                 		<IPHost>

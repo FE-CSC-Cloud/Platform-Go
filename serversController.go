@@ -149,66 +149,60 @@ func getVCenterPowerState(DBId string, VCenterServers []vCenterServers) string {
 }
 
 func createServer(c echo.Context) error {
-	_, _, name, StudentID := getUserAssociatedWithJWT(c)
+	json := new(jsonBody)
+	err := c.Bind(&json)
+	if err != nil {
+		log.Println("Error binding JSON: ", err)
+		return c.JSON(http.StatusBadRequest, "Invalid JSON")
+	}
+
+	db, err := connectToDB()
+	if err != nil {
+		log.Fatal("Error connecting to database: ", err)
+	}
+
+	session := getVCenterSession()
+
+	valid, errMessage, endDate := validateServerCreation(json, session)
+	if !valid {
+		return c.JSON(http.StatusBadRequest, errMessage)
+	}
+
+	UserId, _, name, studentID := getUserAssociatedWithJWT(c)
+
+	serverAlreadyExists := checkIfUserAlreadyHasServerWithName(json.Name, UserId, db)
+	if serverAlreadyExists {
+		return c.JSON(http.StatusOK, "Deze naam bestaat al voor jouw!")
+	}
+
+	ip := findEmptyIp()
+	if ip == "" {
+		return c.JSON(http.StatusBadRequest, "No IP addresses available")
+	}
+
+	err = createServerInDB(UserId, json, endDate, session, db)
+	if err != nil {
+		log.Fatal("Error creating server: ", err)
+	}
 
 	nameWithoutSpace := strings.ReplaceAll(name, " ", "-")
 
-	parseAndSetIpListForSophos()
-	err := createIPHostInSopohos("145.89.192.231", nameWithoutSpace, StudentID)
+	var vCenterID = createvCenterVM(session, UserId, json.Name, json.OperatingSystem)
+
+	err = updateServerWithVCenterID(vCenterID, json.Name, UserId, db)
 	if err != nil {
-		log.Println("Error creating IP host: ", err)
-		return c.JSON(http.StatusInternalServerError, "Kon server niet aan firewall toevoegen")
+		log.Fatal("Error updating server with vCenter ID: ", err)
 	}
 
-	err = createSophosFirewallRules(StudentID, nameWithoutSpace)
+	err = createFirewall(ip, studentID, nameWithoutSpace)
 	if err != nil {
-		log.Println("Error creating IP host: ", err)
-		return c.JSON(http.StatusInternalServerError, "Kon server niet aan firewall toevoegen")
+		return c.JSON(http.StatusBadRequest, "Error creating firewall rules")
 	}
-
-	err = updateFirewallRuleGroupInSophos(StudentID, nameWithoutSpace)
-	if err != nil {
-		log.Println("Error creating IP host: ", err)
-		return c.JSON(http.StatusInternalServerError, "Kon server niet aan firewall toevoegen")
-	}
-
-	/*	json := new(jsonBody)
-		err := c.Bind(&json)
-		if err != nil {
-			log.Println("Error binding JSON: ", err)
-			return c.JSON(http.StatusBadRequest, "Invalid JSON")
-		}
-
-		db, err := connectToDB()
-		if err != nil {
-			log.Fatal("Error connecting to database: ", err)
-		}
-
-		session := getVCenterSession()
-
-		valid, errMessage, endDate := validateServerCreation(json, session)
-		if !valid {
-			return c.JSON(http.StatusBadRequest, errMessage)
-		}
-
-		UserId, _ := getUserAssociatedWithJWT(c)
-
-		serverAlreadyExists := checkIfUserAlreadyHasServerWithName(json.name, UserId, db)
-		if serverAlreadyExists {
-			return c.JSON(http.StatusOK, "Deze naam bestaat al voor jouw!")
-		}
-
-		err = createServerInDB(UserId, json, endDate, session, db)
-		if err != nil {
-			log.Fatal("Error creating server: ", err)
-		}*/
 
 	return c.JSON(http.StatusCreated, "Server gemaakt!")
 }
 
 func createServerInDB(UserId string, json *jsonBody, endDate time.Time, session string, db *sql.DB) error {
-	var vCenterID = createvCenterVM(session, UserId, json.Name, json.OperatingSystem)
-
 	// Insert the new server into the database
 	stmt, err := db.Prepare("INSERT INTO virtual_machines(users_id, vcenter_id, name, description, end_date, operating_system, storage, memory, ip) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
@@ -216,8 +210,47 @@ func createServerInDB(UserId string, json *jsonBody, endDate time.Time, session 
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(UserId, vCenterID, json.Name, json.Description, endDate, json.OperatingSystem, json.Storage, json.Memory, "")
+	_, err = stmt.Exec(UserId, "", json.Name, json.Description, endDate, json.OperatingSystem, json.Storage, json.Memory, "")
 	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func updateServerWithVCenterID(vCenterID, name, userID string, db *sql.DB) error {
+	// Update the vCenter ID in the database
+	stmt, err := db.Prepare("UPDATE virtual_machines SET vcenter_id = ? WHERE name = ? and users_id = ?")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(vCenterID, name, userID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func createFirewall(ip, studentID, name string) error {
+	parseAndSetIpListForSophos()
+	err := createIPHostInSopohos(ip, studentID, name)
+	if err != nil {
+		log.Println("Error creating IP host: ", err)
+		return err
+	}
+
+	err = createSophosFirewallRules(studentID, name)
+	if err != nil {
+		log.Println("Error creating IP host: ", err)
+		return err
+	}
+
+	err = updateFirewallRuleGroupInSophos(studentID, name)
+	if err != nil {
+		log.Println("Error creating IP host: ", err)
 		return err
 	}
 
