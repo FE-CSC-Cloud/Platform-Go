@@ -109,7 +109,7 @@ func checkIfvCenterSessionIsExpired(sessionID string) bool {
 func refreshVCenterSession() string {
 	sessionID := vCenterFetchSession()
 	if sessionID != "Unauthorized" {
-		setToRedis("session", sessionID)
+		setToRedis("session", sessionID, 0)
 	} else {
 		log.Println("Unauthorized, clearing session from cache")
 	}

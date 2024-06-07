@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/redis/go-redis/v9"
 	"log"
+	"time"
 )
 
 // opens a connection to the Redis database
@@ -37,9 +38,9 @@ func existsInRedis(key string) bool {
 	return val > 0
 }
 
-func setToRedis(key string, value string) {
+func setToRedis(key string, value string, expiration int) {
 	db := connectToRedis()
-	err := db.Set(context.Background(), key, value, 0).Err()
+	err := db.Set(context.Background(), key, value, time.Duration(expiration)).Err()
 	if err != nil {
 		log.Println("Error setting value in Redis: ", err)
 	}

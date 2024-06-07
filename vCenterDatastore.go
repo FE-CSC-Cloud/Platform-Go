@@ -68,9 +68,9 @@ func updateDataStoreID(session string) string {
 	err = json.Unmarshal(body, &dataStores)
 
 	// set the data store ID to redis so we don't have to fetch it every time
-	setToRedis("data_store_id", dataStores[0].DataStore)
+	setToRedis("data_store_id", dataStores[0].DataStore, 0)
 	// save the date and time the data store ID was last updated
-	setToRedis("data_store_id_last_updated", strconv.FormatInt(time.Now().Unix(), 10))
+	setToRedis("data_store_id_last_updated", strconv.FormatInt(time.Now().Unix(), 10), 0)
 
 	return dataStores[0].DataStore
 }

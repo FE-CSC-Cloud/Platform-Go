@@ -1,19 +1,19 @@
 package main
 
 import (
-    "encoding/json"
-    "io"
-    "log"
-    "net/http"
-    "strconv"
-    "strings"
-    "time"
+	"encoding/json"
+	"io"
+	"log"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
 )
 
 func getTemplatesFromVCenter(session string) []string {
 	var templateNames []string
-	if existsInRedis("templates_last_updated") == false {
-		setToRedis("templates_last_updated", "0")
+	if !existsInRedis("templates_last_updated") {
+		setToRedis("templates_last_updated", "0", 0)
 	}
 	templatesLastUpdated := getFromRedis("templates_last_updated")
 
@@ -100,8 +100,8 @@ func updateTemplatesFromVCenter(session string, templateIDs []string) {
 		err = json.Unmarshal(body, &template)
 
 		// Add the template to redis
-		setToRedis(templateID, template.Name)
-		setToRedis(template.Name, templateID)
+		setToRedis(templateID, template.Name, 0)
+		setToRedis(template.Name, templateID, 0)
 		err = resp.Body.Close()
 		if err != nil {
 			return
@@ -109,5 +109,5 @@ func updateTemplatesFromVCenter(session string, templateIDs []string) {
 	}
 
 	// set the time the templates were last updated as unix int to redis
-	setToRedis("templates_last_updated", strconv.FormatInt(time.Now().Unix(), 10))
+	setToRedis("templates_last_updated", strconv.FormatInt(time.Now().Unix(), 10), 0)
 }
