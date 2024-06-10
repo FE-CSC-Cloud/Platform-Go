@@ -287,6 +287,56 @@ func doAuthenticatedSophosRequest(xml string) *http.Response {
 	return resp
 }
 
+func getSophosIpHost() (string, error) {
+	requestXML := fmt.Sprintf(`
+                    <Get>
+                        <IPHost>
+                        </IPHost>
+                    </Get>`)
+
+	resp := doAuthenticatedSophosRequest(requestXML)
+
+	// parse response
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return string(body), nil
+}
+
+func addIpToSophos(studentID, ip string, count int) error {
+	reqXML := fmt.Sprintf(`
+                    <Set operation="add">
+                        <IPHost>
+                            <Name>OICT-AUTO %s Prive %d</Name>
+                            <HostType>IP</HostType>
+                            <IPAddress>%s</IPAddress>
+                            <HostGroupList>
+                                <HostGroup>Students Private IP's</HostGroup>
+                            </HostGroupList>
+                        </IPHost>
+                    </Set>`, studentID, count, ip)
+
+	resp := doAuthenticatedSophosRequest(reqXML)
+
+	// parse response
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println(string(body))
+
+	// check if the response is an error
+	// not simply a 200 OK because Sophos returns multiple error codes for each task (adding ip and adding host group)
+	if !sophosResponseContainsError(string(body), []int{500, 502, 503, 541}) {
+		return fmt.Errorf("error creating IP host in Sophos: %s", string(body))
+	}
+
+	return nil
+}
+
 func findEmptyIp() string {
 	db, err := connectToDB()
 	if err != nil {
@@ -302,4 +352,14 @@ func findEmptyIp() string {
 	}
 
 	return ip
+}
+
+func sophosResponseContainsError(response string, errorCodesToLookFor []int) bool {
+	for _, code := range errorCodesToLookFor {
+		if strings.Contains(response, fmt.Sprintf(`<Status code="%d">`, code)) {
+			return true
+		}
+	}
+
+	return false
 }

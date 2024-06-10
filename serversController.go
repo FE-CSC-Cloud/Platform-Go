@@ -47,12 +47,13 @@ type PowerStatusReturn struct {
 }
 
 type jsonBody struct {
-	Name            string `json:"name"`
-	Description     string `json:"description"`
-	OperatingSystem string `json:"operating_system"`
-	EndDate         string `json:"end_date"`
-	Storage         int    `json:"storage"`
-	Memory          int    `json:"memory"`
+	Name            string    `json:"name"`
+	Description     string    `json:"description"`
+	OperatingSystem string    `json:"operating_system"`
+	EndDate         string    `json:"end_date"`
+	Storage         int       `json:"storage"`
+	Memory          int       `json:"memory"`
+	HomeIPs         *[]string `json:"home_ips"`
 }
 
 func getServers(c echo.Context) error {
@@ -199,6 +200,11 @@ func createServer(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "Error creating firewall rules")
 	}
 
+	err = addUsersToFirewall(studentID, *json)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, "Error adding ips to firewall")
+	}
+
 	return c.JSON(http.StatusCreated, "Server gemaakt!")
 }
 
@@ -252,6 +258,32 @@ func createFirewall(ip, studentID, name string) error {
 	if err != nil {
 		log.Println("Error creating IP host: ", err)
 		return err
+	}
+
+	return nil
+}
+
+func addUsersToFirewall(studentID string, json jsonBody) error {
+	ipHost, err := getSophosIpHost()
+	if err != nil {
+		return err
+	}
+
+	// Check how many IP's are already in sophos belonging to the student
+	userHasIPsWhitelisted := strings.Count(ipHost, studentID)
+
+	// Check if the IP already exists in sophos
+	for _, ip := range *json.HomeIPs {
+		if strings.Contains(ipHost, ip) {
+			return err
+		}
+	}
+
+	for _, ip := range *json.HomeIPs {
+		err := addIpToSophos(studentID, ip, userHasIPsWhitelisted)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
