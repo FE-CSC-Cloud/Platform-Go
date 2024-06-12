@@ -274,3 +274,60 @@ func getUserAssociatedWithJWT(c echo.Context) (string, bool, string, string) {
 
 	return claims["sid"].(string), claims["admin"].(bool), claims["givenName"].(string), claims["studentId"].(string)
 }
+
+func fetchUserInfoWithSID(sid string) (string, string, string, error) {
+	// Connect to LDAP
+	ldapConn, err := connectAndBind(getEnvVar("LDAP_READ_USER"), getEnvVar("LDAP_READ_PASS"))
+
+	// Search for the user with the given SID
+	searchRequest := ldap.NewSearchRequest(
+		getEnvVar("LDAP_BASE_DN"),
+		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+		fmt.Sprintf("(&(objectClass=user)(objectSid=%s))", sid),
+		[]string{"memberOf", "givenName", "description", "sn"},
+		nil,
+	)
+
+	sr, err := ldapConn.Search(searchRequest)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to search LDAP server: %v", err)
+	}
+
+	if len(sr.Entries) == 0 {
+		return "", "", "", fmt.Errorf("no entries found for user with SID %s", sid)
+	}
+
+	entry := sr.Entries[0]
+
+	memberOf := entry.GetAttributeValues("memberOf")
+
+	firstName := entry.GetAttributeValue("givenName")
+
+	description := entry.GetAttributeValue("description")
+	// last name is an array for some reason so we have to check if it exists
+	var lastName string
+	if len(entry.GetAttributeValues("sn")) >= 1 {
+		lastName = entry.GetAttributeValues("sn")[0]
+	}
+
+	fullName := firstName + " " + lastName
+
+	var groups []string
+
+	// Get only the CN= and not the OU=
+	for _, dn := range memberOf {
+		// Extract the part of the DN starting with "CN=" and ending before the next comma
+		start := strings.Index(dn, "CN=")
+		if start != -1 {
+			start += 3 // Skip past "CN="
+			end := strings.Index(dn[start:], ",")
+			if end != -1 {
+				groups = append(groups, dn[start:start+end])
+			} else {
+				groups = append(groups, dn[start:])
+			}
+		}
+	}
+
+	return fullName, description, sid, nil
+}

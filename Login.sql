@@ -72,6 +72,20 @@ CREATE TABLE `tickets` (
     `response` text NOT NULL,
     `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `notifications` (
+    `id` bigint NOT NULL,
+    `title` varchar(255) NOT NULL,
+    `message` text NOT NULL,
+    `user_id` bigint NOT NULL,
+    `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `errors` (
+    `id` bigint NOT NULL,
+    `message` text NOT NULL,
+    `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 --
 -- Indexes for dumped tables
 --
@@ -99,6 +113,17 @@ ALTER TABLE `ip_adresses`
 ALTER TABLE `tickets`
     ADD PRIMARY KEY(`id`);
 ALTER Table `tickets`
+    MODIFY `id` bigint NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
+
+
+ALTER TABLE `notifications`
+    ADD PRIMARY KEY(`id`);
+ALTER Table `notifications`
+    MODIFY `id` bigint NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
+
+ALTER TABLE `errors`
+    ADD PRIMARY KEY(`id`);
+ALTER Table `errors`
     MODIFY `id` bigint NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 COMMIT;

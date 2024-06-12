@@ -25,7 +25,6 @@ func createIpAdress(c echo.Context) error {
 			failedIpAddresses = append(failedIpAddresses, ip)
 			log.Println("Error inserting ip address: ", err)
 		}
-		log.Println("Creating ip address: ", ip)
 	}
 
 	defer db.Close()

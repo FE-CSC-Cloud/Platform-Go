@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/labstack/echo/v4"
 	"log"
@@ -149,6 +150,117 @@ func getVCenterPowerState(DBId string, VCenterServers []vCenterServers) string {
 	return "UNKNOWN"
 }
 
+func deleteServer(c echo.Context) error {
+	id := c.Param("id")
+	db, err := connectToDB()
+	if err != nil {
+		log.Fatal("Error connecting to database: ", err)
+	}
+
+	// get the vCenter ID from the database
+	var (
+		vCenterID  string
+		userID     string
+		serverName string
+	)
+
+	err = db.QueryRow("SELECT vcenter_id, users_id, name FROM virtual_machines WHERE id = ?", id).Scan(&vCenterID, &userID, &serverName)
+	if err != nil {
+		log.Fatal("Error getting vCenter ID: ", err)
+	}
+
+	_, studentID, _, err := fetchUserInfoWithSID(userID)
+	if err != nil {
+		log.Fatal("Error fetching user info: ", err)
+		return err
+	}
+
+	// delete the server from sophos
+	err = removeFirewallFromServerInSophos(studentID, serverName)
+	if err != nil {
+		log.Println("Error removing firewall from sophos: ", err)
+		return c.JSON(http.StatusBadRequest, "Error deleting server from sophos")
+	}
+
+	// delete the server from vCenter
+	session := getVCenterSession()
+	status := deletevCenterVM(session, vCenterID)
+
+	if !status {
+		return c.JSON(http.StatusBadRequest, "Error deleting server from vCenter")
+	}
+
+	// Prepare statement for deleting data
+	stmt, err := db.Prepare("DELETE FROM virtual_machines WHERE id = ?")
+	if err != nil {
+		log.Fatal("Error preparing statement: ", err)
+	}
+
+	_, err = stmt.Exec(id)
+	if err != nil {
+		log.Fatal("Error executing statement: ", err)
+	}
+
+	return c.JSON(http.StatusCreated, "Server deleted!")
+}
+
+func powerServer(c echo.Context) error {
+	id := c.Param("id")
+	status := c.Param("status")
+	db, err := connectToDB()
+	if err != nil {
+		log.Fatal("Error connecting to database: ", err)
+	}
+
+	// get the vCenter ID from the database
+	var vCenterID string
+	err = db.QueryRow("SELECT vcenter_id FROM virtual_machines WHERE id = ?", id).Scan(&vCenterID)
+	if err != nil {
+		log.Fatal("Error getting vCenter ID: ", err)
+	}
+
+	session := getVCenterSession()
+	status = strings.ToUpper(status)
+	switch status {
+	case "ON":
+		{
+			success := powerOn(session, vCenterID)
+			if !success {
+				return c.JSON(http.StatusBadRequest, "Error powering on server")
+			}
+		}
+
+	}
+
+	if status != "ON" && status != "OFF" {
+		return c.JSON(http.StatusBadRequest, "Invalid status")
+	}
+
+	if status == "ON" {
+		success := powerOn(session, vCenterID)
+		if !success {
+			return c.JSON(http.StatusBadRequest, "Error powering on server")
+		}
+	}
+
+	if status == "OFF" {
+		success := powerOff(session, vCenterID)
+		if !success {
+			return c.JSON(http.StatusBadRequest, "Error powering off server")
+		}
+	}
+
+	if status == "FORCE_OFF" {
+		success := forcePowerOff(session, vCenterID)
+		if !success {
+			return c.JSON(http.StatusBadRequest, "Error powering off server")
+		}
+	}
+
+	return c.JSON(http.StatusCreated, "Server powered "+status)
+
+}
+
 func createServer(c echo.Context) error {
 	json := new(jsonBody)
 	err := c.Bind(&json)
@@ -159,21 +271,22 @@ func createServer(c echo.Context) error {
 
 	db, err := connectToDB()
 	if err != nil {
-		log.Fatal("Error connecting to database: ", err)
+		log.Println("Error connecting to database: ", err)
 	}
 
 	session := getVCenterSession()
+	serverCreationStep := ""
 
 	valid, errMessage, endDate := validateServerCreation(json, session)
 	if !valid {
 		return c.JSON(http.StatusBadRequest, errMessage)
 	}
 
-	UserId, _, name, studentID := getUserAssociatedWithJWT(c)
+	UserId, _, _, studentID := getUserAssociatedWithJWT(c)
 
 	serverAlreadyExists := checkIfUserAlreadyHasServerWithName(json.Name, UserId, db)
 	if serverAlreadyExists {
-		return c.JSON(http.StatusOK, "Deze naam bestaat al voor jouw!")
+		return c.JSON(http.StatusOK, "You're already using this name!")
 	}
 
 	ip := findEmptyIp()
@@ -183,29 +296,66 @@ func createServer(c echo.Context) error {
 
 	err = createServerInDB(UserId, json, endDate, session, db)
 	if err != nil {
-		log.Fatal("Error creating server: ", err)
+		log.Println("Error creating server: ", err)
+	}
+	serverCreationStep = "made in db"
+
+	go func() {
+		var vCenterID, err = createvCenterVM(session, UserId, json.Name, json.OperatingSystem)
+		err = updateServerWithVCenterID(vCenterID, json.Name, UserId, db)
+		if err != nil {
+			logErrorInDB(err)
+			handleFailedCreation(json.Name, UserId, studentID, "", serverCreationStep, db)
+			log.Println("Error updating or making server: ", err)
+			log.Println("vCenter ID: ", vCenterID)
+			return
+		}
+		serverCreationStep = "made in vCenter"
+
+		err = createFirewallRuleForServerCreation(ip, studentID, json.Name)
+		if err != nil {
+			logErrorInDB(err)
+			handleFailedCreation(json.Name, UserId, studentID, vCenterID, serverCreationStep, db)
+			log.Println("Error creating firewall rules: ", err)
+			return
+		}
+
+		serverCreationStep = "made in sophos"
+
+		err = addUsersToFirewall(studentID, *json)
+		if err != nil {
+			logErrorInDB(err)
+			handleFailedCreation(json.Name, UserId, studentID, vCenterID, serverCreationStep, db)
+			log.Println("Error adding ips to firewall: ", err)
+			return
+		}
+	}()
+
+	return c.JSON(http.StatusCreated, "Server is being made!")
+}
+
+func validateServerCreation(json *jsonBody, session string) (bool, string, time.Time) {
+	// check if the date is in the correct format (YYYY-MM-DD)
+	var endDate, errDate = time.Parse("2006-01-02", json.EndDate)
+	if errDate != nil {
+		return false, "Invalid date format, please use YYYY-MM-DD", time.Time{}
 	}
 
-	nameWithoutSpace := strings.ReplaceAll(name, " ", "-")
-
-	var vCenterID = createvCenterVM(session, UserId, json.Name, json.OperatingSystem)
-
-	err = updateServerWithVCenterID(vCenterID, json.Name, UserId, db)
-	if err != nil {
-		log.Fatal("Error updating server with vCenter ID: ", err)
+	// check if the end date is in the future
+	if endDate.Before(time.Now()) {
+		return false, "End date in the past", time.Time{}
 	}
 
-	err = createFirewall(ip, studentID, nameWithoutSpace)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Error creating firewall rules")
+	// check if the OS exist
+	templates := getTemplatesFromVCenter(session)
+	if !checkIfItemIsKeyOfArray(json.OperatingSystem, templates) {
+		return false, "Invalid operating system", time.Time{}
 	}
 
-	err = addUsersToFirewall(studentID, *json)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Error adding ips to firewall")
-	}
+	// remove spaces from the name
+	json.Name = strings.ReplaceAll(json.Name, " ", "")
 
-	return c.JSON(http.StatusCreated, "Server gemaakt!")
+	return true, "", endDate
 }
 
 func createServerInDB(UserId string, json *jsonBody, endDate time.Time, session string, db *sql.DB) error {
@@ -224,6 +374,20 @@ func createServerInDB(UserId string, json *jsonBody, endDate time.Time, session 
 	return nil
 }
 
+func deleteServerFromDB(serverName, userId string, db *sql.DB) {
+	// Prepare statement for deleting data
+	stmt, err := db.Prepare("DELETE FROM virtual_machines WHERE name = ? and users_id = ?")
+	if err != nil {
+		log.Println("Error preparing statement: ", err)
+	}
+
+	_, err = stmt.Exec(serverName, userId)
+	if err != nil {
+		log.Println("Error executing statement: ", err)
+	}
+
+}
+
 func updateServerWithVCenterID(vCenterID, name, userID string, db *sql.DB) error {
 	// Update the vCenter ID in the database
 	stmt, err := db.Prepare("UPDATE virtual_machines SET vcenter_id = ? WHERE name = ? and users_id = ?")
@@ -240,23 +404,30 @@ func updateServerWithVCenterID(vCenterID, name, userID string, db *sql.DB) error
 	return nil
 }
 
-func createFirewall(ip, studentID, name string) error {
+func createFirewallRuleForServerCreation(ip, studentID, serverName string) error {
+	defer timeTrack(time.Now(), "createFirewallRuleForServerCreation")
 	parseAndSetIpListForSophos()
-	err := createIPHostInSopohos(ip, studentID, name)
+	err := createIPHostInSopohos(ip, studentID, serverName)
 	if err != nil {
 		log.Println("Error creating IP host: ", err)
 		return err
 	}
-
-	err = createSophosFirewallRules(studentID, name)
+	err = createSophosFirewallRules(studentID, serverName)
 	if err != nil {
-		log.Println("Error creating IP host: ", err)
+		removeIPHostInSophos(studentID, serverName)
+
+		log.Println("Error creating firewall rules: ", err)
 		return err
 	}
 
-	err = updateFirewallRuleGroupInSophos(studentID, name)
+	err = updateFirewallRuleGroupInSophos(studentID, serverName)
 	if err != nil {
-		log.Println("Error creating IP host: ", err)
+		log.Println("Error updating rule group: ", err)
+
+		removeIPHostInSophos(studentID, serverName)
+		removeInBoundRuleInSophos(studentID, serverName)
+		removeOutBoundRuleInSophos(studentID, serverName)
+
 		return err
 	}
 
@@ -289,61 +460,24 @@ func addUsersToFirewall(studentID string, json jsonBody) error {
 	return nil
 }
 
-func validateServerCreation(json *jsonBody, session string) (bool, string, time.Time) {
-	// check if the date is in the correct format (YYYY-MM-DD)
-	var endDate, errDate = time.Parse("2006-01-02", json.EndDate)
-	if errDate != nil {
-		return false, "Invalid date format, please use YYYY-MM-DD", time.Time{}
+func handleFailedCreation(serverName, userId, studentId, vCenterId, serverCreationStep string, db *sql.DB) {
+	logErrorInDB(fmt.Errorf("Server creation failed for server: " + serverName + " got stuck at: " + serverCreationStep))
+	if serverCreationStep == "made in db" {
+		deleteServerFromDB(serverName, studentId, db)
 	}
 
-	// check if the end date is in the future
-	if endDate.Before(time.Now()) {
-		return false, "End date in the past", time.Time{}
+	if serverCreationStep == "made in vCenter" {
+		deleteServerFromDB(serverName, studentId, db)
+		deletevCenterVM(getVCenterSession(), vCenterId)
 	}
 
-	// check if the OS exist
-	templates := getTemplatesFromVCenter(session)
-	if !checkIfItemIsKeyOfArray(json.OperatingSystem, templates) {
-		return false, "Invalid operating system", time.Time{}
+	if serverCreationStep == "made in sophos" {
+		removeIPHostInSophos(studentId, serverName)
+		removeInBoundRuleInSophos(studentId, serverName)
+		removeOutBoundRuleInSophos(studentId, serverName)
 	}
 
-	return true, "", endDate
-}
-
-func deleteServer(c echo.Context) error {
-	id := c.Param("id")
-	db, err := connectToDB()
-	if err != nil {
-		log.Fatal("Error connecting to database: ", err)
-	}
-
-	// get the vCenter ID from the database
-	var vCenterID string
-	err = db.QueryRow("SELECT vcenter_id FROM virtual_machines WHERE id = ?", id).Scan(&vCenterID)
-	if err != nil {
-		log.Fatal("Error getting vCenter ID: ", err)
-	}
-
-	// delete the server from vCenter
-	session := getVCenterSession()
-	status := deletevCenterVM(session, vCenterID)
-
-	if !status {
-		return c.JSON(http.StatusBadRequest, "Error deleting server from vCenter")
-	}
-
-	// Prepare statement for deleting data
-	stmt, err := db.Prepare("DELETE FROM virtual_machines WHERE id = ?")
-	if err != nil {
-		log.Fatal("Error preparing statement: ", err)
-	}
-
-	_, err = stmt.Exec(id)
-	if err != nil {
-		log.Fatal("Error executing statement: ", err)
-	}
-
-	return c.JSON(http.StatusCreated, "Server deleted!")
+	createNotificationForUser(db, userId, "Server creation failed", "Server creation failed for server: "+serverName)
 }
 
 func checkIfUserAlreadyHasServerWithName(name, userID string, db *sql.DB) bool {

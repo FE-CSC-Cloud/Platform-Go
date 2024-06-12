@@ -1,13 +1,13 @@
 package main
 
 import (
-    "bytes"
-    "crypto/tls"
-    "encoding/json"
-    "io"
-    "log"
-    "net/http"
-    "time"
+	"bytes"
+	"crypto/tls"
+	"encoding/json"
+	"io"
+	"log"
+	"net/http"
+	"time"
 )
 
 type vCenterTemplates struct {
@@ -61,7 +61,7 @@ func getPowerStatusFromvCenter(session string, vmID string) []vCenterServers {
 	return servers
 }
 
-func createvCenterVM(session string, studentID string, vmName string, templateName string) string {
+func createvCenterVM(session string, studentID string, vmName string, templateName string) (string, error) {
 	defer timeTrack(time.Now(), "createvCenterVM")
 
 	type HardwareCustomization struct {
@@ -109,7 +109,7 @@ func createvCenterVM(session string, studentID string, vmName string, templateNa
 
 	jsonReqBody, err := json.Marshal(reqBody)
 	if err != nil {
-		panic(err)
+		log.Println("Error marshalling request body: ", err)
 	}
 
 	// Create a new request
@@ -117,7 +117,7 @@ func createvCenterVM(session string, studentID string, vmName string, templateNa
 		// body
 		bytes.NewBuffer(jsonReqBody))
 	if err != nil {
-		log.Fatal("Error creating request: ", err)
+		log.Println("Error creating request: ", err)
 	}
 
 	req.Header.Add("vmware-api-session-id", session)
@@ -132,13 +132,13 @@ func createvCenterVM(session string, studentID string, vmName string, templateNa
 	// Read the response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal("Error reading response: ", err)
+		return "", err
 	}
 
 	defer resp.Body.Close()
 
 	// remove the " " from the response and convert it to a string of just the VM ID
-	return string(body[1 : len(body)-1])
+	return string(body[1 : len(body)-1]), nil
 }
 
 func deletevCenterVM(session string, vmID string) bool {
@@ -168,6 +168,60 @@ func deletevCenterVM(session string, vmID string) bool {
 	if resp.StatusCode != 204 {
 		return false
 	}
+
+	return true
+}
+
+func powerOn(session string, id string) bool {
+	defer timeTrack(time.Now(), "powerOn")
+	client := createVCenterHTTPClient()
+	baseURL := getEnvVar("VCENTER_URL")
+
+	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=start", nil)
+	if err != nil {
+		log.Fatal("Error creating request: ", err)
+	}
+
+	req.Header.Add("vmware-api-session-id", session)
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal("Error sending request: ", err)
+	}
+
+	if resp.StatusCode != 204 && resp.StatusCode != 400 {
+		return false
+	}
+
+	defer resp.Body.Close()
+
+	return true
+}
+
+func powerOff(session string, id string) bool {
+	defer timeTrack(time.Now(), "powerOff")
+	client := createVCenterHTTPClient()
+	baseURL := getEnvVar("VCENTER_URL")
+
+	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=stop", nil)
+	if err != nil {
+		log.Fatal("Error creating request: ", err)
+	}
+
+	req.Header.Add("vmware-api-session-id", session)
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal("Error sending request: ", err)
+	}
+
+	if resp.StatusCode != 204 && resp.StatusCode != 400 {
+		return false
+	}
+
+	defer resp.Body.Close()
 
 	return true
 }

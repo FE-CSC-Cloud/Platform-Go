@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"strconv"
+	"strings"
 )
 
 func stringToInt64(stringToInt string) int64 {
@@ -20,4 +21,9 @@ func checkIfItemIsKeyOfArray(item string, array []string) bool {
 		}
 	}
 	return false
+}
+
+func ip2long(ip string) uint32 {
+	ipLong, _ := strconv.ParseUint(strings.Join(strings.Split(ip, "."), ""), 10, 32)
+	return uint32(ipLong)
 }

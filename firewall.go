@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 )
@@ -62,31 +61,35 @@ func createIPHostInSopohos(ip, studentID, name string) error {
 
 func createSophosFirewallRules(studentID, name string) error {
 	var wg sync.WaitGroup
-	var err error
+	var inboundErr, outboundErr error
 
 	wg.Add(2)
 
+	// create inbound and outbound rules concurrently to save a bit of time
 	go func() {
 		defer wg.Done()
-		err = createInBoundRuleInSophos(studentID, name)
-		if err != nil {
-			log.Println("Error creating IP host: ", err)
+		inboundErr = createInBoundRuleInSophos(studentID, name)
+		if inboundErr != nil {
+			log.Println("Error creating inbound rule: ", inboundErr)
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		err = createOutBoundRuleInSophos(studentID, name)
-		if err != nil {
-			log.Println("Error creating IP host: ", err)
+		outboundErr = createOutBoundRuleInSophos(studentID, name)
+		if outboundErr != nil {
+			log.Println("Error creating outbound rule: ", outboundErr)
 		}
 	}()
 
-	go func() {
-		wg.Wait()
-	}()
+	// Wait for both goroutines to finish
+	wg.Wait()
 
-	return err
+	// Return the first non-nil error, if any
+	if inboundErr != nil {
+		return inboundErr
+	}
+	return outboundErr
 }
 
 func createInBoundRuleInSophos(studentId, name string) error {
@@ -128,7 +131,7 @@ func createInBoundRuleInSophos(studentId, name string) error {
 
 	// check if the response is an error
 	if !strings.Contains(string(body), `<Status code="200">`) {
-		return fmt.Errorf("error creating IP host in Sophos: %s", string(body))
+		return fmt.Errorf(string(body))
 	}
 
 	return nil
@@ -172,7 +175,7 @@ func createOutBoundRuleInSophos(studentId, name string) error {
 
 	// check if the response is an error
 	if !strings.Contains(string(body), `<Status code="200">`) {
-		return fmt.Errorf("error creating IP host in Sophos: %s", string(body))
+		return fmt.Errorf(string(body))
 	}
 
 	return nil
@@ -200,7 +203,7 @@ func updateFirewallRuleGroupInSophos(studentId, name string) error {
 
 	// check if the response is an error
 	if !strings.Contains(string(body), `<Status code="200">`) {
-		return fmt.Errorf("error creating IP host in Sophos: %s", string(body))
+		return fmt.Errorf(string(body))
 	}
 
 	defer resp.Body.Close()
@@ -211,7 +214,7 @@ func updateFirewallRuleGroupInSophos(studentId, name string) error {
 func parseAndSetIpListForSophos() {
 	jsonFile, err := os.Open(getEnvVar("IP_LIST"))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("could nog open IP list JSON: ", err)
 	}
 	defer jsonFile.Close()
 
@@ -242,11 +245,6 @@ func parseAndSetIpListForSophos() {
 	for _, value := range ipConfig.OutboundServices {
 		outboundServices += "<Service>" + value + "</Service>"
 	}
-}
-
-func ip2long(ip string) uint32 {
-	ipLong, _ := strconv.ParseUint(strings.Join(strings.Split(ip, "."), ""), 10, 32)
-	return uint32(ipLong)
 }
 
 func doAuthenticatedSophosRequest(xml string) *http.Response {
@@ -326,32 +324,13 @@ func addIpToSophos(studentID, ip string, count int) error {
 		log.Fatal(err)
 	}
 
-	log.Println(string(body))
-
 	// check if the response is an error
 	// not simply a 200 OK because Sophos returns multiple error codes for each task (adding ip and adding host group)
 	if !sophosResponseContainsError(string(body), []int{500, 502, 503, 541}) {
-		return fmt.Errorf("error creating IP host in Sophos: %s", string(body))
+		return fmt.Errorf("error adding home IP in Sophos: %s", string(body))
 	}
 
 	return nil
-}
-
-func findEmptyIp() string {
-	db, err := connectToDB()
-	if err != nil {
-		log.Println("Error connecting to database: ", err)
-		return ""
-	}
-
-	var ip string
-	err = db.QueryRow("SELECT ip FROM ip_adresses WHERE virtual_machine_id IS NULL LIMIT 1").Scan(&ip)
-	if err != nil {
-		log.Println("Error executing query: ", err)
-		return ""
-	}
-
-	return ip
 }
 
 func sophosResponseContainsError(response string, errorCodesToLookFor []int) bool {
