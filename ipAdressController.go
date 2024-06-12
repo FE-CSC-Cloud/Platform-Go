@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func createIpAdress(c echo.Context) error {
+func CreateIpAdress(c echo.Context) error {
 	var ipAddresses []string
 	var failedIpAddresses []string
 

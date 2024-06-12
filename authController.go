@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func login(c echo.Context) error {
+func Login(c echo.Context) error {
 	// make a type for the request body
 	type LoginResponse struct {
 		Token string `json:"token"`

@@ -75,7 +75,7 @@ func updateDataStoreID(session string) string {
 	return dataStores[0].DataStore
 }
 
-func refreshDataStores(c echo.Context) error {
+func RefreshDataStores(c echo.Context) error {
 	session := getVCenterSession()
 	dataStores := updateDataStoreID(session)
 	return c.JSON(http.StatusOK, dataStores)

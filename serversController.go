@@ -57,9 +57,9 @@ type jsonBody struct {
 	HomeIPs         *[]string `json:"home_ips"`
 }
 
-func getServers(c echo.Context) error {
+func GetServers(c echo.Context) error {
 	id := c.Param("id")
-	UserId, admin, _, _ := getUserAssociatedWithJWT(c)
+	UserId, isAdmin, _, _ := getUserAssociatedWithJWT(c)
 	session := getVCenterSession()
 	serversFromVCenter := getPowerStatusFromvCenter(session, "")
 
@@ -69,7 +69,7 @@ func getServers(c echo.Context) error {
 	}
 	defer db.Close()
 
-	rows, err := getServersFromSQL(db, id, UserId, admin)
+	rows, err := getServersFromSQL(db, id, UserId, isAdmin)
 	if err != nil {
 		log.Fatal("Error executing query: ", err)
 	}
@@ -80,20 +80,20 @@ func getServers(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "No IP addresses available")
 	}
 
-	rowsArr, err := getPowerStatusRows(rows, serversFromVCenter)
+	RowsArr, err := getPowerStatusRows(rows, serversFromVCenter)
 	if err != nil {
 		log.Fatal("Error scanning row: ", err)
 	}
 
 	if id != "" {
-		if len(rowsArr) > 0 {
-			return c.JSON(http.StatusOK, rowsArr[0])
+		if len(RowsArr) > 0 {
+			return c.JSON(http.StatusOK, RowsArr[0])
 		} else {
 			return c.JSON(http.StatusNotFound, "No servers found for the given ID")
 		}
 	}
 
-	return c.JSON(http.StatusOK, rowsArr)
+	return c.JSON(http.StatusOK, RowsArr)
 }
 
 func getServersFromSQL(db *sql.DB, id string, user string, admin bool) (*sql.Rows, error) {
@@ -150,7 +150,7 @@ func getVCenterPowerState(DBId string, VCenterServers []vCenterServers) string {
 	return "UNKNOWN"
 }
 
-func deleteServer(c echo.Context) error {
+func DeleteServer(c echo.Context) error {
 	id := c.Param("id")
 	db, err := connectToDB()
 	if err != nil {
@@ -164,9 +164,15 @@ func deleteServer(c echo.Context) error {
 		serverName string
 	)
 
-	err = db.QueryRow("SELECT vcenter_id, users_id, name FROM virtual_machines WHERE id = ?", id).Scan(&vCenterID, &userID, &serverName)
+	_, isAdmin, _, _ := getUserAssociatedWithJWT(c)
+
+	if isAdmin {
+		err = db.QueryRow("SELECT vcenter_id, users_id, name FROM virtual_machines WHERE id = ?", id).Scan(&vCenterID, &userID, &serverName)
+	} else {
+		err = db.QueryRow("SELECT vcenter_id, users_id, name FROM virtual_machines WHERE id = ? and users_id = ?", id, userID).Scan(&vCenterID, &userID, &serverName)
+	}
 	if err != nil {
-		log.Fatal("Error getting vCenter ID: ", err)
+		return c.JSON(http.StatusBadRequest, "Can't find server with that ID")
 	}
 
 	_, studentID, _, err := fetchUserInfoWithSID(userID)
@@ -204,7 +210,7 @@ func deleteServer(c echo.Context) error {
 	return c.JSON(http.StatusCreated, "Server deleted!")
 }
 
-func powerServer(c echo.Context) error {
+func PowerServer(c echo.Context) error {
 	id := c.Param("id")
 	status := c.Param("status")
 	db, err := connectToDB()
@@ -212,11 +218,18 @@ func powerServer(c echo.Context) error {
 		log.Fatal("Error connecting to database: ", err)
 	}
 
+	userId, isAdmin, _, _ := getUserAssociatedWithJWT(c)
+
 	// get the vCenter ID from the database
 	var vCenterID string
-	err = db.QueryRow("SELECT vcenter_id FROM virtual_machines WHERE id = ?", id).Scan(&vCenterID)
+
+	if isAdmin {
+		err = db.QueryRow("SELECT vcenter_id FROM virtual_machines WHERE id = ?", id).Scan(&vCenterID)
+	} else {
+		err = db.QueryRow("SELECT vcenter_id FROM virtual_machines WHERE id = ? and users_id = ?", id, userId).Scan(&vCenterID)
+	}
 	if err != nil {
-		log.Fatal("Error getting vCenter ID: ", err)
+		return c.JSON(http.StatusBadRequest, "Can't find server with that ID")
 	}
 
 	session := getVCenterSession()
@@ -252,7 +265,7 @@ func powerServer(c echo.Context) error {
 
 }
 
-func createServer(c echo.Context) error {
+func CreateServer(c echo.Context) error {
 	json := new(jsonBody)
 	err := c.Bind(&json)
 	if err != nil {

@@ -20,16 +20,14 @@ func main() {
 	s := e.Group("/servers")
 	s.Use(checkIfLoggedIn)
 
-	s.GET("", getServers)
-	s.POST("", createServer)
+	s.GET("", GetServers)
+	s.POST("", CreateServer)
 
-	// TODO: check if the user is Admin or not and give users only the servers they have access to
-	s.POST("/power/:id/:status", powerServer)
+	s.POST("/power/:id/:status", PowerServer)
 
-	s.GET("/:id", getServers)
+	s.GET("/:id", GetServers)
 
-	// TODO: check if the user is Admin or not and give users only the servers they have access to
-	s.DELETE("/:id", deleteServer)
+	s.DELETE("/:id", DeleteServer)
 
 	// TODO: array met template IDs cachen (fetchTemplateLibraryIdsFromVCenter)
 	// TODO: JSON het zelfde maken als de Laravel JSON
@@ -52,19 +50,19 @@ func main() {
 	       }
 	   }
 	*/
-	e.GET("/templates", getTemplates)
+	e.GET("/templates", GetTemplates)
 
 	g := e.Group("/admin")
 
 	g.Use(checkIfLoggedInAsAdmin)
 
-	g.POST("/ipAdresses", createIpAdress)
+	g.POST("/ipAdresses", CreateIpAdress)
 
 	// force the templates to be re-cached
-	g.GET("/templates/refresh", refreshTemplates)
-	g.GET("/dataStores/refresh", refreshDataStores)
+	g.GET("/templates/refresh", RefreshTemplates)
+	g.GET("/dataStores/refresh", RefreshDataStores)
 
-	e.POST("/auth/login", login)
+	e.POST("/auth/Login", Login)
 
 	e.Logger.Fatal(e.Start(":1323"))
 }

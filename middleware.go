@@ -57,9 +57,9 @@ func checkIfLoggedInAsAdmin(next echo.HandlerFunc) echo.HandlerFunc {
 			return c.JSON(http.StatusUnauthorized, "Token is expired")
 		}
 
-		_, admin, _, _ := getUserAssociatedWithJWT(c)
+		_, isAdmin, _, _ := getUserAssociatedWithJWT(c)
 
-		if !admin {
+		if !isAdmin {
 			return c.JSON(http.StatusUnauthorized, "You need to be an admin to access this route")
 		}
 
