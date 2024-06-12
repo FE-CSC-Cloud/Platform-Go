@@ -23,6 +23,7 @@ func main() {
 	s.GET("", getServers)
 	s.POST("", createServer)
 
+	// TODO: check if the user is Admin or not and give users only the servers they have access to
 	s.POST("/power/:id/:status", powerServer)
 
 	s.GET("/:id", getServers)
