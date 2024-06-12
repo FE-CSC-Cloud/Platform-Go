@@ -221,6 +221,7 @@ func powerServer(c echo.Context) error {
 
 	session := getVCenterSession()
 	status = strings.ToUpper(status)
+
 	switch status {
 	case "ON":
 		{
@@ -229,32 +230,22 @@ func powerServer(c echo.Context) error {
 				return c.JSON(http.StatusBadRequest, "Error powering on server")
 			}
 		}
-
-	}
-
-	if status != "ON" && status != "OFF" {
+	case "OFF":
+		{
+			success := powerOff(session, vCenterID)
+			if !success {
+				return c.JSON(http.StatusBadRequest, "Error powering off server")
+			}
+		}
+	case "FORCE_OFF":
+		{
+			success := forcePowerOff(session, vCenterID)
+			if !success {
+				return c.JSON(http.StatusBadRequest, "Error powering off server")
+			}
+		}
+	default:
 		return c.JSON(http.StatusBadRequest, "Invalid status")
-	}
-
-	if status == "ON" {
-		success := powerOn(session, vCenterID)
-		if !success {
-			return c.JSON(http.StatusBadRequest, "Error powering on server")
-		}
-	}
-
-	if status == "OFF" {
-		success := powerOff(session, vCenterID)
-		if !success {
-			return c.JSON(http.StatusBadRequest, "Error powering off server")
-		}
-	}
-
-	if status == "FORCE_OFF" {
-		success := forcePowerOff(session, vCenterID)
-		if !success {
-			return c.JSON(http.StatusBadRequest, "Error powering off server")
-		}
 	}
 
 	return c.JSON(http.StatusCreated, "Server powered "+status)
