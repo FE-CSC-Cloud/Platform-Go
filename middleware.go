@@ -38,6 +38,35 @@ func checkIfLoggedIn(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
+func checkIfLoggedInAsAdmin(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		token := formatJWTfromBearer(c)
+		// check if the token is valid
+		if token == "" {
+			return echo.ErrUnauthorized
+		}
+
+		valid, expired, err := checkJWT(token)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, "Token Invalid")
+		}
+		if !valid {
+			return c.JSON(http.StatusUnauthorized, "Token Invalid")
+		}
+		if expired {
+			return c.JSON(http.StatusUnauthorized, "Token is expired")
+		}
+
+		_, admin, _, _ := getUserAssociatedWithJWT(c)
+
+		if !admin {
+			return c.JSON(http.StatusUnauthorized, "You need to be an admin to access this route")
+		}
+
+		return next(c)
+	}
+}
+
 func formatJWTfromBearer(c echo.Context) string {
 	// get the token from the request as bearer token
 	token := c.Request().Header.Get("Authorization")

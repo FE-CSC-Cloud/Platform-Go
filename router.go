@@ -29,7 +29,6 @@ func main() {
 	s.GET("/:id", getServers)
 
 	// TODO: check if the user is Admin or not and give users only the servers they have access to
-	// TODO: Regels uit firewall halen
 	s.DELETE("/:id", deleteServer)
 
 	// TODO: array met template IDs cachen (fetchTemplateLibraryIdsFromVCenter)
@@ -59,13 +58,10 @@ func main() {
 
 	g.POST("/ipAdresses", createIpAdress)
 
-	g.Use(checkIfLoggedIn)
+	g.Use(checkIfLoggedInAsAdmin)
 
 	// force the templates to be recached
-	// TODO: zorgen dat alleen Admins dit kunnen doen
 	g.GET("/templates/refresh", refreshTemplates)
-
-	// TODO: zorgen dat alleen Admins dit kunnen doen
 	g.GET("/dataStores/refresh", refreshDataStores)
 
 	e.POST("/auth/login", login)
