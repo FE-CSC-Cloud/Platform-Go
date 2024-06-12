@@ -56,11 +56,11 @@ func main() {
 
 	g := e.Group("/admin")
 
-	g.POST("/ipAdresses", createIpAdress)
-
 	g.Use(checkIfLoggedInAsAdmin)
 
-	// force the templates to be recached
+	g.POST("/ipAdresses", createIpAdress)
+
+	// force the templates to be re-cached
 	g.GET("/templates/refresh", refreshTemplates)
 	g.GET("/dataStores/refresh", refreshDataStores)
 
