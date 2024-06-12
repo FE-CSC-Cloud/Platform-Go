@@ -320,6 +320,8 @@ func createServer(c echo.Context) error {
 			log.Println("Error adding ips to firewall: ", err)
 			return
 		}
+
+		powerOn(session, vCenterID)
 	}()
 
 	return c.JSON(http.StatusCreated, "Server is being made!")
