@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -176,4 +177,74 @@ func deletevCenterVM(session, vmID string) bool {
 	}
 
 	return true
+}
+
+func runStartScript(session string, startScript startScript, firstName, studentId, vCenterId, ip, vmName string) error {
+	type Credentials struct {
+		InteractiveSession bool   `json:"interactive_session"`
+		Type               string `json:"type"`
+		UserName           string `json:"user_name"`
+		Password           string `json:"password"`
+	}
+
+	type Spec struct {
+		Arguments string `json:"arguments"`
+		Path      string `json:"path"`
+	}
+
+	type StartScript struct {
+		Credentials Credentials `json:"credentials"`
+		Spec        Spec        `json:"spec"`
+	}
+
+	client := createVCenterHTTPClient()
+
+	baseURL := getEnvVar("VCENTER_URL")
+
+	reqBodyPre := StartScript{
+		Credentials: Credentials{
+			InteractiveSession: false,
+			Type:               "USERNAME_PASSWORD",
+			UserName:           startScript.User,
+			Password:           startScript.Password,
+		},
+		Spec: Spec{
+			Arguments: fmt.Sprintf("%s %s %s %s %s %s", startScript.ScriptLocation, studentId, firstName, ip, firstName, vmName),
+			Path:      startScript.ScriptLocation,
+		},
+	}
+
+	jsonBody, err := json.Marshal(reqBodyPre)
+	if err != nil {
+		log.Println("Error marshalling start script: ", err)
+	}
+
+	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+vCenterId+"/guest/processes?action=create", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		log.Println("Error creating request: ", err)
+	}
+
+	req.Header.Add("vmware-api-session-id", session)
+	req.Header.Add("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println("Error sending request: ", err)
+	}
+
+	log.Println(resp.StatusCode)
+
+	if resp.StatusCode != 200 {
+		// print the response body
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Println("Error reading response body: ", err)
+		}
+
+		log.Println(string(body))
+
+		return errors.New("Error starting script")
+	}
+
+	return nil
 }

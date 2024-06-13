@@ -1,0 +1,6 @@
+{
+    "user":"ubuntu",
+    "password":"ubuntu",
+    "scriptLocation":"-c 'echo ubuntu' | sudo -S ~/test.sh",
+    "scriptExecutable": "/bin/bash"
+}
