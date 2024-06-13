@@ -28,7 +28,7 @@ func createVCenterHTTPClient() *http.Client {
 
 // vmID is optional, if it is empty, it will return the power status of all VMs, otherwise it will return the power status of the specified VM
 // if you know how to make this optional please do
-func getPowerStatusFromvCenter(session string, vmID string) []vCenterServers {
+func getPowerStatusFromvCenter(session, vmID string) []vCenterServers {
 	defer timeTrack(time.Now(), "getPowerStatusFromvCenter")
 	client := createVCenterHTTPClient()
 	baseURL := getEnvVar("VCENTER_URL")
@@ -63,7 +63,7 @@ func getPowerStatusFromvCenter(session string, vmID string) []vCenterServers {
 	return servers
 }
 
-func createvCenterVM(session string, studentID string, vmName string, templateName string) (string, error) {
+func createvCenterVM(session, studentID, vmName, templateName string, storage, memory int) (string, error) {
 	defer timeTrack(time.Now(), "createvCenterVM")
 
 	type HardwareCustomization struct {
@@ -100,11 +100,11 @@ func createvCenterVM(session string, studentID string, vmName string, templateNa
 		HardwareCustomization: HardwareCustomization{
 			DisksToUpdate: map[string]map[string]int{
 				"2000": {
-					"capacity": 21474836480,
+					"capacity": storage * 1073741824,
 				},
 			},
 			MemoryUpdate: map[string]int{
-				"memory": 1024,
+				"memory": memory * 1024,
 			},
 		},
 	}
@@ -147,7 +147,7 @@ func createvCenterVM(session string, studentID string, vmName string, templateNa
 	return string(body[1 : len(body)-1]), nil
 }
 
-func deletevCenterVM(session string, vmID string) bool {
+func deletevCenterVM(session, vmID string) bool {
 	defer timeTrack(time.Now(), "deletevCenterVM")
 
 	success := forcePowerOff(session, vmID)
@@ -178,7 +178,7 @@ func deletevCenterVM(session string, vmID string) bool {
 	return true
 }
 
-func powerOn(session string, id string) bool {
+func powerOn(session, id string) bool {
 	defer timeTrack(time.Now(), "powerOn")
 	client := createVCenterHTTPClient()
 	baseURL := getEnvVar("VCENTER_URL")
@@ -205,7 +205,7 @@ func powerOn(session string, id string) bool {
 	return true
 }
 
-func powerOff(session string, id string) bool {
+func powerOff(session, id string) bool {
 	defer timeTrack(time.Now(), "powerOff")
 	client := createVCenterHTTPClient()
 	baseURL := getEnvVar("VCENTER_URL")
@@ -232,7 +232,7 @@ func powerOff(session string, id string) bool {
 	return true
 }
 
-func forcePowerOff(session string, id string) bool {
+func forcePowerOff(session, id string) bool {
 	defer timeTrack(time.Now(), "forcePowerOff")
 	client := createVCenterHTTPClient()
 	baseURL := getEnvVar("VCENTER_URL")
