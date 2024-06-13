@@ -310,7 +310,7 @@ func CreateServer(c echo.Context) error {
 	serverCreationStep = "made in db"
 
 	go func() {
-		var vCenterID, err = createvCenterVM(session, UserId, json.Name, json.OperatingSystem)
+		var vCenterID, err = createvCenterVM(session, UserId, json.Name, json.OperatingSystem, json.Storage, json.Memory)
 		err = updateServerWithVCenterID(vCenterID, json.Name, UserId, db)
 		if err != nil {
 			logErrorInDB(err)
