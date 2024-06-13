@@ -8,3 +8,12 @@ func createNotificationForUser(db *sql.DB, userID, title, message string) {
 		panic(err)
 	}
 }
+
+/*func sendEmailNotification(db *sql.DB, userID, title, message string) {
+	createNotificationForUser(db, userID, title, message)
+	// Send email
+	from := getEnvVar("EMAIL_USER")
+	password := getEnvVar("EMAIL_PASSWORD")
+
+	to := getUserEmail(db, userID)
+}*/

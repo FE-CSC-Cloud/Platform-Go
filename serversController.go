@@ -188,6 +188,11 @@ func DeleteServer(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "Error deleting server from sophos")
 	}
 
+	err = unassignIPfromVM(vCenterID)
+	if err != nil {
+		return err
+	}
+
 	// delete the server from vCenter
 	session := getVCenterSession()
 	status := deletevCenterVM(session, vCenterID)
@@ -298,7 +303,7 @@ func CreateServer(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "No IP addresses available")
 	}
 
-	err = createServerInDB(UserId, json, endDate, session, db)
+	err = createServerInDB(UserId, json, endDate, db)
 	if err != nil {
 		log.Println("Error creating server: ", err)
 	}
@@ -325,6 +330,16 @@ func CreateServer(c echo.Context) error {
 		}
 
 		serverCreationStep = "made in sophos"
+
+		err = assignIPToVM(ip, vCenterID)
+		if err != nil {
+			logErrorInDB(err)
+			handleFailedCreation(json.Name, UserId, studentID, vCenterID, serverCreationStep, db)
+			log.Println("Error assigning IP to VM: ", err)
+			return
+		}
+
+		serverCreationStep = "made in ip"
 
 		err = addUsersToFirewall(studentID, *json)
 		if err != nil {
@@ -364,7 +379,7 @@ func validateServerCreation(json *jsonBody, session string) (bool, string, time.
 	return true, "", endDate
 }
 
-func createServerInDB(UserId string, json *jsonBody, endDate time.Time, session string, db *sql.DB) error {
+func createServerInDB(UserId string, json *jsonBody, endDate time.Time, db *sql.DB) error {
 	// Insert the new server into the database
 	stmt, err := db.Prepare("INSERT INTO virtual_machines(users_id, vcenter_id, name, description, end_date, operating_system, storage, memory, ip) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
@@ -449,6 +464,10 @@ func addUsersToFirewall(studentID string, json jsonBody) error {
 	// Check how many IP's are already in sophos belonging to the student
 	userHasIPsWhitelisted := strings.Count(ipHost, studentID)
 
+	if json.HomeIPs == nil {
+		return nil
+	}
+
 	// Check if the IP already exists in sophos
 	for _, ip := range *json.HomeIPs {
 		if strings.Contains(ipHost, ip) {
@@ -478,9 +497,44 @@ func handleFailedCreation(serverName, userId, studentId, vCenterId, serverCreati
 	}
 
 	if serverCreationStep == "made in sophos" {
-		removeIPHostInSophos(studentId, serverName)
-		removeInBoundRuleInSophos(studentId, serverName)
-		removeOutBoundRuleInSophos(studentId, serverName)
+		deleteServerFromDB(serverName, studentId, db)
+		deletevCenterVM(getVCenterSession(), vCenterId)
+
+		err := removeIPHostInSophos(studentId, serverName)
+		if err != nil {
+			log.Println("Error removing IP host in Sophos: ", err)
+		}
+		err = removeInBoundRuleInSophos(studentId, serverName)
+		if err != nil {
+			log.Println("Error removing inbound rule in Sophos: ", err)
+		}
+		err = removeOutBoundRuleInSophos(studentId, serverName)
+		if err != nil {
+			log.Println("Error removing outbound rule in Sophos: ", err)
+		}
+	}
+
+	if serverCreationStep == "made in ip" {
+		deleteServerFromDB(serverName, studentId, db)
+		deletevCenterVM(getVCenterSession(), vCenterId)
+
+		err := removeIPHostInSophos(studentId, serverName)
+		if err != nil {
+			log.Println("Error removing IP host in Sophos: ", err)
+		}
+		err = removeInBoundRuleInSophos(studentId, serverName)
+		if err != nil {
+			log.Println("Error removing inbound rule in Sophos: ", err)
+		}
+		err = removeOutBoundRuleInSophos(studentId, serverName)
+		if err != nil {
+			log.Println("Error removing outbound rule in Sophos: ", err)
+		}
+
+		err = unassignIPfromVM(vCenterId)
+		if err != nil {
+			log.Println("Error unassigning IP from VM: ", err)
+		}
 	}
 
 	createNotificationForUser(db, userId, "Server creation failed", "Server creation failed for server: "+serverName)

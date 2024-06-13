@@ -62,7 +62,7 @@ func main() {
 	g.GET("/templates/refresh", RefreshTemplates)
 	g.GET("/dataStores/refresh", RefreshDataStores)
 
-	e.POST("/auth/Login", Login)
+	e.POST("/auth/login", Login)
 
 	e.Logger.Fatal(e.Start(":1323"))
 }

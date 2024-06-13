@@ -58,7 +58,7 @@ CREATE TABLE `virtual_machines` (
 
 CREATE TABLE `ip_adresses` (
   `ip` varchar(15) NOT NULL,
-  `virtual_machine_id` bigint NULL,
+  `virtual_machine_id` varchar(10) NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -77,7 +77,7 @@ CREATE TABLE `notifications` (
     `id` bigint NOT NULL,
     `title` varchar(255) NOT NULL,
     `message` text NOT NULL,
-    `user_id` bigint NOT NULL,
+    `user_id` varchar(255) NOT NULL,
     `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 

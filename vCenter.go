@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -136,6 +138,10 @@ func createvCenterVM(session string, studentID string, vmName string, templateNa
 	}
 
 	defer resp.Body.Close()
+
+	if strings.Contains(string(body[1:len(body)-1]), "\"error_type\":\"ALREADY_EXISTS\"") {
+		return "", errors.New("VM already exists")
+	}
 
 	// remove the " " from the response and convert it to a string of just the VM ID
 	return string(body[1 : len(body)-1]), nil

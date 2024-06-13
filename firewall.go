@@ -23,9 +23,6 @@ type IpConfig struct {
 }
 
 var (
-	minIp            uint32
-	maxIp            uint32
-	excluded         []uint32
 	sourceNetworks   string
 	inboundServices  string
 	outboundServices string
@@ -222,17 +219,6 @@ func parseAndSetIpListForSophos() {
 
 	var ipConfig IpConfig
 	json.Unmarshal(byteValue, &ipConfig)
-
-	minIp = ip2long(ipConfig.Min)
-	maxIp = ip2long(ipConfig.Max)
-
-	if minIp > maxIp {
-		log.Fatal("Minimum IP cannot be higher than maximum IP")
-	}
-
-	for _, value := range ipConfig.Excluded {
-		excluded = append(excluded, ip2long(value))
-	}
 
 	for _, value := range ipConfig.SourceNetworks {
 		sourceNetworks += "<Network>" + value + "</Network>"
