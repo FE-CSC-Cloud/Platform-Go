@@ -320,7 +320,7 @@ func CreateServer(c echo.Context) error {
 	serverCreationStep = "made in db"
 
 	go func() {
-		var vCenterID, err = createvCenterVM(session, UserId, jsonBody.Name, jsonBody.OperatingSystem, jsonBody.Storage, jsonBody.Memory)
+		var vCenterID, err = createvCenterVM(session, studentID, jsonBody.Name, jsonBody.OperatingSystem, jsonBody.Storage, jsonBody.Memory)
 		err = updateServerWithVCenterID(vCenterID, jsonBody.Name, UserId, db)
 		if err != nil {
 			logErrorInDB(err)
@@ -366,10 +366,18 @@ func CreateServer(c echo.Context) error {
 			log.Println("Error running script in VM: ", err)
 		}
 
+		time.Sleep(30 * time.Second)
+
 		// Get only the first name of the user
 		firstName := strings.Split(fullName, " ")[0]
 
 		err = runStartScript(session, startScript, firstName, studentID, vCenterID, ip, jsonBody.Name)
+		if err != nil {
+			logErrorInDB(err)
+			handleFailedCreation(jsonBody.Name, UserId, studentID, vCenterID, serverCreationStep, db)
+			log.Println("Error running script in VM: ", err)
+			return
+		}
 	}()
 
 	return c.JSON(http.StatusCreated, "Server is being made!")

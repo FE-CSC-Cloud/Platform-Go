@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -209,10 +208,12 @@ func runStartScript(session string, startScript startScript, firstName, studentI
 			Password:           startScript.Password,
 		},
 		Spec: Spec{
-			Arguments: fmt.Sprintf("%s %s %s %s %s %s", startScript.ScriptLocation, studentId, firstName, ip, firstName, vmName),
-			Path:      startScript.ScriptLocation,
+			Arguments: startScript.ScriptLocation + " " + studentId + " " + firstName + " " + ip + " " + firstName + " " + vCenterId + " " + vmName,
+			Path:      startScript.ScriptExecutable,
 		},
 	}
+
+	log.Println(reqBodyPre)
 
 	jsonBody, err := json.Marshal(reqBodyPre)
 	if err != nil {
@@ -234,7 +235,7 @@ func runStartScript(session string, startScript startScript, firstName, studentI
 
 	log.Println(resp.StatusCode)
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != 201 {
 		// print the response body
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
@@ -243,7 +244,7 @@ func runStartScript(session string, startScript startScript, firstName, studentI
 
 		log.Println(string(body))
 
-		return errors.New("Error starting script")
+		return errors.New("Error starting script status:" + string(rune(resp.StatusCode)) + " vCenter body: \n" + string(body))
 	}
 
 	return nil

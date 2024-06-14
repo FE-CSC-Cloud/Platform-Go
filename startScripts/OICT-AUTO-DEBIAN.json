@@ -1,0 +1,6 @@
+{
+    "user":"debian",
+    "password":"debian",
+    "scriptLocation":"-c 'echo debian' | sudo -S ~/test.sh",
+    "scriptExecutable": "/bin/bash"
+}
