@@ -43,7 +43,7 @@ CREATE TABLE `user_tokens` (
 CREATE TABLE `virtual_machines` (
   `id` bigint NOT NULL,
   `users_id` text NOT NULL,
-  `vcenter_id` varchar(255) NOT NULL,
+  `vcenter_id` varchar(100) NOT NULL,
   `name` varchar(100) NOT NULL,
   `description` text NOT NULL,
   `end_date` date NOT NULL,
@@ -78,6 +78,7 @@ CREATE TABLE `notifications` (
     `title` varchar(255) NOT NULL,
     `message` text NOT NULL,
     `user_id` varchar(255) NOT NULL,
+    `read_notif` tinyint NOT NULL DEFAULT '0',
     `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 

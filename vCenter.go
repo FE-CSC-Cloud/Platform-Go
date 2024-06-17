@@ -213,8 +213,6 @@ func runStartScript(session string, startScript startScript, firstName, studentI
 		},
 	}
 
-	log.Println(reqBodyPre)
-
 	jsonBody, err := json.Marshal(reqBodyPre)
 	if err != nil {
 		log.Println("Error marshalling start script: ", err)
@@ -232,8 +230,6 @@ func runStartScript(session string, startScript startScript, firstName, studentI
 	if err != nil {
 		log.Println("Error sending request: ", err)
 	}
-
-	log.Println(resp.StatusCode)
 
 	if resp.StatusCode != 201 {
 		// print the response body

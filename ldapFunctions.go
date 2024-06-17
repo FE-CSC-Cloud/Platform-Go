@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/go-ldap/ldap/v3"
+	"log"
 	"strings"
 )
 
@@ -22,7 +23,7 @@ func connectAndBind(username string, password string) (*ldap.Conn, error) {
 	return ldapConn, nil
 }
 
-func fetchUserInfoWithSID(sid string) (string, string, string, error) {
+func fetchUserInfoWithSID(sid string) (string, string, string, string, error) {
 	// Connect to LDAP
 	ldapConn, err := connectAndBind(getEnvVar("LDAP_READ_USER"), getEnvVar("LDAP_READ_PASS"))
 
@@ -31,17 +32,17 @@ func fetchUserInfoWithSID(sid string) (string, string, string, error) {
 		getEnvVar("LDAP_BASE_DN"),
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
 		fmt.Sprintf("(&(objectClass=user)(objectSid=%s))", sid),
-		[]string{"memberOf", "givenName", "description", "sn"},
+		[]string{"memberOf", "givenName", "description", "mail", "sn"},
 		nil,
 	)
 
 	sr, err := ldapConn.Search(searchRequest)
 	if err != nil {
-		return "", "", "", fmt.Errorf("failed to search LDAP server: %v", err)
+		return "", "", "", "", fmt.Errorf("failed to search LDAP server: %v", err)
 	}
 
 	if len(sr.Entries) == 0 {
-		return "", "", "", fmt.Errorf("no entries found for user with SID %s", sid)
+		return "", "", "", "", fmt.Errorf("no entries found for user with SID %s", sid)
 	}
 
 	entry := sr.Entries[0]
@@ -51,6 +52,9 @@ func fetchUserInfoWithSID(sid string) (string, string, string, error) {
 	firstName := entry.GetAttributeValue("givenName")
 
 	description := entry.GetAttributeValue("description")
+
+	email := entry.GetAttributeValue("mail")
+	log.Println("Email: ", email)
 	// last name is an array for some reason so we have to check if it exists
 	var lastName string
 	if len(entry.GetAttributeValues("sn")) >= 1 {
@@ -76,7 +80,7 @@ func fetchUserInfoWithSID(sid string) (string, string, string, error) {
 		}
 	}
 
-	return fullName, description, sid, nil
+	return fullName, description, sid, email, nil
 }
 
 func fetchUserInfo(ldapConn *ldap.Conn, username string) ([]string, string, string, string, error) {
