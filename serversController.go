@@ -371,7 +371,10 @@ func CreateServer(c echo.Context) error {
 
 		_, _, _, studentEmail, err := fetchUserInfoWithSID(UserId)
 
-		sendEmailNotification(studentEmail, "Server creation successful", "Your server has been created successfully. You can now access it using the following IP: "+ip)
+		serverCreationSuccessTitle := "Server is gemaakt"
+		serverCreationSuccessBody := "Je server(" + jsonBody.Name + ") is gemaakt met het ip: " + ip + " je gebruikersnaam is: " + firstName + " en je wachtwoord is: " + firstName + " verander dit aub zo snel mogelijk!"
+		sendEmailNotification(studentEmail, serverCreationSuccessTitle, serverCreationSuccessBody)
+		createNotificationForUser(db, UserId, serverCreationSuccessTitle, serverCreationSuccessBody)
 	}()
 
 	return c.JSON(http.StatusCreated, "Server is being made!")
@@ -567,7 +570,12 @@ func handleFailedCreation(serverName, userId, studentId, vCenterId, serverCreati
 		}
 	}
 
-	createNotificationForUser(db, userId, "Server creation failed", "Server creation failed for server: "+serverName)
+	userErrorTitle := "Error bij server maken"
+	userErrorBody := "Server: " + serverName + " kon niet gemaakt worden probeer dit aub opnieuw met een andere naam. \n Als dit probleem zich blijft voordoen neem dan contact op met de beheerder"
+
+	createNotificationForUser(db, userId, userErrorTitle, userErrorBody)
+	_, _, _, studentEmail, _ := fetchUserInfoWithSID(userId)
+	sendEmailNotification(studentEmail, userErrorTitle, userErrorBody)
 }
 
 func deleteServerFromDB(serverName, userId string, db *sql.DB) {

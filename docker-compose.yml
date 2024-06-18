@@ -11,7 +11,10 @@ services:
         networks:
             - backend
     db:
-        image: mysql:latest
+        build:
+            context: .
+            dockerfile: Dockerfile.db
+        command: --max_connections=200000
         restart: always
         environment:
             MYSQL_ALLOW_EMPTY_PASSWORD: true
