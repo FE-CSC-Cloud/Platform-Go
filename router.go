@@ -74,5 +74,5 @@ func main() {
 
 	e.GET("checkIfTokenIsValid", checkIfTokenIsValid)
 
-	e.Logger.Fatal(e.Start(":1323"))
+	e.Logger.Fatal(e.Start(":" + getEnvVar("APP_PORT")))
 }
