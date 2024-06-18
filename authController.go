@@ -1,12 +1,12 @@
 package main
 
 import (
-    "fmt"
-    "github.com/golang-jwt/jwt/v5"
-    "github.com/labstack/echo/v4"
-    "log"
-    "net/http"
-    "time"
+	"fmt"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/labstack/echo/v4"
+	"log"
+	"net/http"
+	"time"
 )
 
 func Login(c echo.Context) error {
@@ -198,4 +198,24 @@ func getUserAssociatedWithJWT(c echo.Context) (string, bool, string, string) {
 	}
 
 	return claims["sid"].(string), claims["admin"].(bool), claims["givenName"].(string), claims["studentId"].(string)
+}
+
+func checkIfTokenIsValid(c echo.Context) error {
+	token := formatJWTfromBearer(c)
+
+	// check if the token exists in the database
+	db, err := connectToDB()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, "Failed to connect to database")
+	}
+
+	var tokenFromDB string
+	err = db.QueryRow("SELECT token FROM user_tokens WHERE token = ?", token).Scan(&tokenFromDB)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, "Token is invalid")
+	}
+
+	db.Close()
+
+	return c.JSON(http.StatusOK, "Token is valid")
 }

@@ -178,83 +178,70 @@ func deletevCenterVM(session, vmID string) bool {
 	return true
 }
 
-func powerOn(session, id string) bool {
-	defer timeTrack(time.Now(), "powerOn")
+func runStartScript(session string, startScript startScript, firstName, studentId, vCenterId, ip, vmName string) error {
+	type Credentials struct {
+		InteractiveSession bool   `json:"interactive_session"`
+		Type               string `json:"type"`
+		UserName           string `json:"user_name"`
+		Password           string `json:"password"`
+	}
+
+	type Spec struct {
+		Arguments string `json:"arguments"`
+		Path      string `json:"path"`
+	}
+
+	type StartScript struct {
+		Credentials Credentials `json:"credentials"`
+		Spec        Spec        `json:"spec"`
+	}
+
 	client := createVCenterHTTPClient()
+
 	baseURL := getEnvVar("VCENTER_URL")
 
-	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=start", nil)
+	reqBodyPre := StartScript{
+		Credentials: Credentials{
+			InteractiveSession: false,
+			Type:               "USERNAME_PASSWORD",
+			UserName:           startScript.User,
+			Password:           startScript.Password,
+		},
+		Spec: Spec{
+			Arguments: startScript.ScriptLocation + " " + studentId + " " + firstName + " " + ip + " " + firstName + " " + vCenterId + " " + vmName,
+			Path:      startScript.ScriptExecutable,
+		},
+	}
+
+	jsonBody, err := json.Marshal(reqBodyPre)
 	if err != nil {
-		log.Fatal("Error creating request: ", err)
+		log.Println("Error marshalling start script: ", err)
+	}
+
+	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+vCenterId+"/guest/processes?action=create", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		log.Println("Error creating request: ", err)
 	}
 
 	req.Header.Add("vmware-api-session-id", session)
+	req.Header.Add("Content-Type", "application/json")
 
-	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Error sending request: ", err)
+		log.Println("Error sending request: ", err)
 	}
 
-	if resp.StatusCode != 204 && resp.StatusCode != 400 {
-		return false
+	if resp.StatusCode != 201 {
+		// print the response body
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Println("Error reading response body: ", err)
+		}
+
+		log.Println(string(body))
+
+		return errors.New("Error starting script status:" + string(rune(resp.StatusCode)) + " vCenter body: \n" + string(body))
 	}
 
-	defer resp.Body.Close()
-
-	return true
-}
-
-func powerOff(session, id string) bool {
-	defer timeTrack(time.Now(), "powerOff")
-	client := createVCenterHTTPClient()
-	baseURL := getEnvVar("VCENTER_URL")
-
-	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=stop", nil)
-	if err != nil {
-		log.Fatal("Error creating request: ", err)
-	}
-
-	req.Header.Add("vmware-api-session-id", session)
-
-	// Send the request
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal("Error sending request: ", err)
-	}
-
-	if resp.StatusCode != 204 && resp.StatusCode != 400 {
-		return false
-	}
-
-	defer resp.Body.Close()
-
-	return true
-}
-
-func forcePowerOff(session, id string) bool {
-	defer timeTrack(time.Now(), "forcePowerOff")
-	client := createVCenterHTTPClient()
-	baseURL := getEnvVar("VCENTER_URL")
-
-	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=stop", nil)
-	if err != nil {
-		log.Fatal("Error creating request: ", err)
-	}
-
-	req.Header.Add("vmware-api-session-id", session)
-
-	// Send the request
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal("Error sending request: ", err)
-	}
-
-	if resp.StatusCode != 204 && resp.StatusCode != 400 {
-		return false
-	}
-
-	defer resp.Body.Close()
-
-	return true
+	return nil
 }

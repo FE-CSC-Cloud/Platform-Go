@@ -2,11 +2,14 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/labstack/echo/v4"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -47,7 +50,7 @@ type PowerStatusReturn struct {
 	PowerStatus     string
 }
 
-type jsonBody struct {
+type serverCreationJsonBody struct {
 	Name            string    `json:"name"`
 	Description     string    `json:"description"`
 	OperatingSystem string    `json:"operating_system"`
@@ -55,6 +58,13 @@ type jsonBody struct {
 	Storage         int       `json:"storage"`
 	Memory          int       `json:"memory"`
 	HomeIPs         *[]string `json:"home_ips"`
+}
+
+type startScript struct {
+	User             string `json:"user"`
+	Password         string `json:"password"`
+	ScriptLocation   string `json:"scriptLocation"`
+	ScriptExecutable string `json:"scriptExecutable"`
 }
 
 func GetServers(c echo.Context) error {
@@ -74,11 +84,6 @@ func GetServers(c echo.Context) error {
 		log.Fatal("Error executing query: ", err)
 	}
 	defer rows.Close()
-
-	ip := findEmptyIp()
-	if ip == "" {
-		return c.JSON(http.StatusBadRequest, "No IP addresses available")
-	}
 
 	RowsArr, err := getPowerStatusRows(rows, serversFromVCenter)
 	if err != nil {
@@ -122,6 +127,7 @@ func getPowerStatusRows(rows *sql.Rows, serversFromVCenter []vCenterServers) ([]
 
 		wg.Add(1)
 		go func(s PowerStatusReturn) {
+
 			defer wg.Done()
 			s.PowerStatus = getVCenterPowerState(s.VcenterId, serversFromVCenter)
 			rowChan <- s
@@ -164,7 +170,7 @@ func DeleteServer(c echo.Context) error {
 		serverName string
 	)
 
-	_, isAdmin, _, _ := getUserAssociatedWithJWT(c)
+	_, isAdmin, _, studentID := getUserAssociatedWithJWT(c)
 
 	if isAdmin {
 		err = db.QueryRow("SELECT vcenter_id, users_id, name FROM virtual_machines WHERE id = ?", id).Scan(&vCenterID, &userID, &serverName)
@@ -173,12 +179,6 @@ func DeleteServer(c echo.Context) error {
 	}
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, "Can't find server with that ID")
-	}
-
-	_, studentID, _, err := fetchUserInfoWithSID(userID)
-	if err != nil {
-		log.Fatal("Error fetching user info: ", err)
-		return err
 	}
 
 	// delete the server from sophos
@@ -271,8 +271,8 @@ func PowerServer(c echo.Context) error {
 }
 
 func CreateServer(c echo.Context) error {
-	json := new(jsonBody)
-	err := c.Bind(&json)
+	jsonBody := new(serverCreationJsonBody)
+	err := c.Bind(&jsonBody)
 	if err != nil {
 		log.Println("Error binding JSON: ", err)
 		return c.JSON(http.StatusBadRequest, "Invalid JSON")
@@ -286,14 +286,14 @@ func CreateServer(c echo.Context) error {
 	session := getVCenterSession()
 	serverCreationStep := ""
 
-	valid, errMessage, endDate := validateServerCreation(json, session)
+	valid, errMessage, endDate := validateServerCreation(jsonBody, session)
 	if !valid {
 		return c.JSON(http.StatusBadRequest, errMessage)
 	}
 
-	UserId, _, _, studentID := getUserAssociatedWithJWT(c)
+	UserId, _, fullName, studentID := getUserAssociatedWithJWT(c)
 
-	serverAlreadyExists := checkIfUserAlreadyHasServerWithName(json.Name, UserId, db)
+	serverAlreadyExists := checkIfUserAlreadyHasServerWithName(jsonBody.Name, UserId, db)
 	if serverAlreadyExists {
 		return c.JSON(http.StatusOK, "You're already using this name!")
 	}
@@ -303,28 +303,28 @@ func CreateServer(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "No IP addresses available")
 	}
 
-	err = createServerInDB(UserId, json, endDate, db)
+	err = createServerInDB(UserId, jsonBody, endDate, db)
 	if err != nil {
 		log.Println("Error creating server: ", err)
 	}
 	serverCreationStep = "made in db"
 
 	go func() {
-		var vCenterID, err = createvCenterVM(session, UserId, json.Name, json.OperatingSystem)
-		err = updateServerWithVCenterID(vCenterID, json.Name, UserId, db)
+		var vCenterID, err = createvCenterVM(session, studentID, jsonBody.Name, jsonBody.OperatingSystem, jsonBody.Storage, jsonBody.Memory)
+		err = updateServerWithVCenterID(vCenterID, jsonBody.Name, UserId, ip, db)
 		if err != nil {
 			logErrorInDB(err)
-			handleFailedCreation(json.Name, UserId, studentID, "", serverCreationStep, db)
+			handleFailedCreation(jsonBody.Name, UserId, studentID, "", serverCreationStep, db)
 			log.Println("Error updating or making server: ", err)
 			log.Println("vCenter ID: ", vCenterID)
 			return
 		}
 		serverCreationStep = "made in vCenter"
 
-		err = createFirewallRuleForServerCreation(ip, studentID, json.Name)
+		err = createFirewallRuleForServerCreation(ip, studentID, jsonBody.Name)
 		if err != nil {
 			logErrorInDB(err)
-			handleFailedCreation(json.Name, UserId, studentID, vCenterID, serverCreationStep, db)
+			handleFailedCreation(jsonBody.Name, UserId, studentID, vCenterID, serverCreationStep, db)
 			log.Println("Error creating firewall rules: ", err)
 			return
 		}
@@ -334,28 +334,50 @@ func CreateServer(c echo.Context) error {
 		err = assignIPToVM(ip, vCenterID)
 		if err != nil {
 			logErrorInDB(err)
-			handleFailedCreation(json.Name, UserId, studentID, vCenterID, serverCreationStep, db)
+			handleFailedCreation(jsonBody.Name, UserId, studentID, vCenterID, serverCreationStep, db)
 			log.Println("Error assigning IP to VM: ", err)
 			return
 		}
 
 		serverCreationStep = "made in ip"
 
-		err = addUsersToFirewall(studentID, *json)
+		err = addUsersToFirewall(studentID, *jsonBody)
 		if err != nil {
 			logErrorInDB(err)
-			handleFailedCreation(json.Name, UserId, studentID, vCenterID, serverCreationStep, db)
+			handleFailedCreation(jsonBody.Name, UserId, studentID, vCenterID, serverCreationStep, db)
 			log.Println("Error adding ips to firewall: ", err)
 			return
 		}
 
 		powerOn(session, vCenterID)
+
+		startScript, err := readStartScript(jsonBody.OperatingSystem)
+		if err != nil {
+			log.Println("Error running script in VM: ", err)
+		}
+
+		time.Sleep(30 * time.Second)
+
+		// Get only the first name of the user
+		firstName := strings.Split(fullName, " ")[0]
+
+		err = runStartScript(session, startScript, firstName, studentID, vCenterID, ip, jsonBody.Name)
+		if err != nil {
+			logErrorInDB(err)
+			handleFailedCreation(jsonBody.Name, UserId, studentID, vCenterID, serverCreationStep, db)
+			log.Println("Error running script in VM: ", err)
+			return
+		}
+
+		_, _, _, studentEmail, err := fetchUserInfoWithSID(UserId)
+
+		sendEmailNotification(studentEmail, "Server creation successful", "Your server has been created successfully. You can now access it using the following IP: "+ip)
 	}()
 
 	return c.JSON(http.StatusCreated, "Server is being made!")
 }
 
-func validateServerCreation(json *jsonBody, session string) (bool, string, time.Time) {
+func validateServerCreation(json *serverCreationJsonBody, session string) (bool, string, time.Time) {
 	// check if the date is in the correct format (YYYY-MM-DD)
 	var endDate, errDate = time.Parse("2006-01-02", json.EndDate)
 	if errDate != nil {
@@ -379,7 +401,7 @@ func validateServerCreation(json *jsonBody, session string) (bool, string, time.
 	return true, "", endDate
 }
 
-func createServerInDB(UserId string, json *jsonBody, endDate time.Time, db *sql.DB) error {
+func createServerInDB(UserId string, json *serverCreationJsonBody, endDate time.Time, db *sql.DB) error {
 	// Insert the new server into the database
 	stmt, err := db.Prepare("INSERT INTO virtual_machines(users_id, vcenter_id, name, description, end_date, operating_system, storage, memory, ip) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
@@ -395,29 +417,15 @@ func createServerInDB(UserId string, json *jsonBody, endDate time.Time, db *sql.
 	return nil
 }
 
-func deleteServerFromDB(serverName, userId string, db *sql.DB) {
-	// Prepare statement for deleting data
-	stmt, err := db.Prepare("DELETE FROM virtual_machines WHERE name = ? and users_id = ?")
-	if err != nil {
-		log.Println("Error preparing statement: ", err)
-	}
-
-	_, err = stmt.Exec(serverName, userId)
-	if err != nil {
-		log.Println("Error executing statement: ", err)
-	}
-
-}
-
-func updateServerWithVCenterID(vCenterID, name, userID string, db *sql.DB) error {
+func updateServerWithVCenterID(vCenterID, name, userID, ip string, db *sql.DB) error {
 	// Update the vCenter ID in the database
-	stmt, err := db.Prepare("UPDATE virtual_machines SET vcenter_id = ? WHERE name = ? and users_id = ?")
+	stmt, err := db.Prepare("UPDATE virtual_machines SET vcenter_id = ?, ip = ? WHERE name = ? and users_id = ?")
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(vCenterID, name, userID)
+	_, err = stmt.Exec(vCenterID, ip, name, userID)
 	if err != nil {
 		return err
 	}
@@ -455,7 +463,7 @@ func createFirewallRuleForServerCreation(ip, studentID, serverName string) error
 	return nil
 }
 
-func addUsersToFirewall(studentID string, json jsonBody) error {
+func addUsersToFirewall(studentID string, json serverCreationJsonBody) error {
 	ipHost, err := getSophosIpHost()
 	if err != nil {
 		return err
@@ -483,6 +491,28 @@ func addUsersToFirewall(studentID string, json jsonBody) error {
 	}
 
 	return nil
+}
+
+func readStartScript(templateName string) (startScript, error) {
+	workingDir, err := os.Getwd()
+	// check if the file exists
+	file, err := os.Open(workingDir + "\\startScripts\\" + templateName + ".json")
+	if err != nil {
+		return startScript{}, err
+	}
+
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		return startScript{}, err
+	}
+
+	var script startScript
+	err = json.Unmarshal(fileBytes, &script)
+	if err != nil {
+		return startScript{}, err
+	}
+
+	return script, nil
 }
 
 func handleFailedCreation(serverName, userId, studentId, vCenterId, serverCreationStep string, db *sql.DB) {
@@ -538,6 +568,20 @@ func handleFailedCreation(serverName, userId, studentId, vCenterId, serverCreati
 	}
 
 	createNotificationForUser(db, userId, "Server creation failed", "Server creation failed for server: "+serverName)
+}
+
+func deleteServerFromDB(serverName, userId string, db *sql.DB) {
+	// Prepare statement for deleting data
+	stmt, err := db.Prepare("DELETE FROM virtual_machines WHERE name = ? and users_id = ?")
+	if err != nil {
+		log.Println("Error preparing statement: ", err)
+	}
+
+	_, err = stmt.Exec(serverName, userId)
+	if err != nil {
+		log.Println("Error executing statement: ", err)
+	}
+
 }
 
 func checkIfUserAlreadyHasServerWithName(name, userID string, db *sql.DB) bool {

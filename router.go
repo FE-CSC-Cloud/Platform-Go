@@ -23,6 +23,8 @@ func main() {
 	s.GET("", GetServers)
 	s.POST("", CreateServer)
 
+	// s.PATCH("/:id", UpdateServer)
+
 	s.POST("/power/:id/:status", PowerServer)
 
 	s.GET("/:id", GetServers)
@@ -63,6 +65,14 @@ func main() {
 	g.GET("/dataStores/refresh", RefreshDataStores)
 
 	e.POST("/auth/login", Login)
+
+	n := e.Group("/notifications")
+	n.Use(checkIfLoggedIn)
+
+	n.GET("", GetNotifications)
+	n.PATCH("/:id", MarkNotificationAsRead)
+
+	e.GET("checkIfTokenIsValid", checkIfTokenIsValid)
 
 	e.Logger.Fatal(e.Start(":1323"))
 }
