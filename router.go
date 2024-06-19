@@ -64,7 +64,10 @@ func main() {
 	g.GET("/templates/refresh", RefreshTemplates)
 	g.GET("/dataStores/refresh", RefreshDataStores)
 
-	e.POST("/auth/login", Login)
+	a := e.Group("/auth")
+	a.POST("/login", Login)
+	a.POST("/resetRequest", ResetRequest)
+	a.POST("/resetPassword", ResetPassword)
 
 	n := e.Group("/notifications")
 	n.Use(checkIfLoggedIn)
@@ -72,7 +75,7 @@ func main() {
 	n.GET("", GetNotifications)
 	n.PATCH("/:id", MarkNotificationAsRead)
 
-	e.GET("checkIfTokenIsValid", checkIfTokenIsValid)
+	e.GET("CheckIfLoginTokenIsValid", CheckIfLoginTokenIsValid)
 
 	e.Logger.Fatal(e.Start(":" + getEnvVar("APP_PORT")))
 }

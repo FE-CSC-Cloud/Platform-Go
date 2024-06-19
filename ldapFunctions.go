@@ -32,7 +32,7 @@ func fetchUserInfoWithSID(sid string) (string, string, string, string, error) {
 		getEnvVar("LDAP_BASE_DN"),
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
 		fmt.Sprintf("(&(objectClass=user)(objectSid=%s))", sid),
-		[]string{"memberOf", "givenName", "description", "mail", "sn"},
+		[]string{"givenName", "description", "mail", "sn"},
 		nil,
 	)
 
@@ -47,7 +47,7 @@ func fetchUserInfoWithSID(sid string) (string, string, string, string, error) {
 
 	entry := sr.Entries[0]
 
-	memberOf := entry.GetAttributeValues("memberOf")
+	// memberOf := entry.GetAttributeValues("memberOf")
 
 	firstName := entry.GetAttributeValue("givenName")
 
@@ -63,24 +63,58 @@ func fetchUserInfoWithSID(sid string) (string, string, string, string, error) {
 
 	fullName := firstName + " " + lastName
 
-	var groups []string
-
-	// Get only the CN= and not the OU=
-	for _, dn := range memberOf {
-		// Extract the part of the DN starting with "CN=" and ending before the next comma
-		start := strings.Index(dn, "CN=")
-		if start != -1 {
-			start += 3 // Skip past "CN="
-			end := strings.Index(dn[start:], ",")
-			if end != -1 {
-				groups = append(groups, dn[start:start+end])
-			} else {
-				groups = append(groups, dn[start:])
-			}
-		}
-	}
+	// groups := getCNs(memberOf)
 
 	return fullName, description, sid, email, nil
+}
+
+func fetchUserInfoWithEmail(email string) (string, string, string, string, string, error) {
+	// Connect to LDAP
+	ldapConn, err := connectAndBind(getEnvVar("LDAP_READ_USER"), getEnvVar("LDAP_READ_PASS"))
+
+	// Search for the user with the given email
+	searchRequest := ldap.NewSearchRequest(
+		getEnvVar("LDAP_BASE_DN"),
+		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+		fmt.Sprintf("(&(objectClass=user)(mail=%s))", email),
+		[]string{"givenName", "description", "objectSid", "sAMAccountName"},
+		nil,
+	)
+
+	sr, err := ldapConn.Search(searchRequest)
+	if err != nil {
+		return "", "", "", "", "", fmt.Errorf("failed to search LDAP server: %v", err)
+	}
+
+	if len(sr.Entries) == 0 {
+		return "", "", "", "", "", fmt.Errorf("no entries found for user with email %s", email)
+	}
+
+	entry := sr.Entries[0]
+
+	// memberOf := entry.GetAttributeValues("memberOf")
+
+	firstName := entry.GetAttributeValue("givenName")
+
+	description := entry.GetAttributeValue("description")
+
+	sAMAccountName := entry.GetAttributeValue("sAMAccountName")
+
+	// last name is an array for some reason so we have to check if it exists
+	var lastName string
+	if len(entry.GetAttributeValues("sn")) >= 1 {
+		lastName = entry.GetAttributeValues("sn")[0]
+	}
+
+	fullName := firstName + " " + lastName
+
+	// groups := getCNs(memberOf)
+
+	// Extract the SID
+	objectSid := entry.GetRawAttributeValue("objectSid")
+	sidString := sidToString(objectSid)
+
+	return fullName, description, sidString, sAMAccountName, email, nil
 }
 
 func fetchUserInfo(ldapConn *ldap.Conn, username string) ([]string, string, string, string, error) {
@@ -116,6 +150,54 @@ func fetchUserInfo(ldapConn *ldap.Conn, username string) ([]string, string, stri
 
 	fullName := firstName + " " + lastName
 
+	groups := getCNs(memberOf)
+
+	// Extract the SID
+	objectSid := entry.GetRawAttributeValue("objectSid")
+	sidString := sidToString(objectSid)
+
+	return groups, fullName, description, sidString, err
+}
+
+func resetPasswordOfSidUser(sid, password string) error {
+	// Connect to LDAP
+	ldapConn, err := connectAndBind(getEnvVar("LDAP_READ_USER"), getEnvVar("LDAP_READ_PASS"))
+
+	// Search for the user with the given SID
+	searchRequest := ldap.NewSearchRequest(
+		getEnvVar("LDAP_BASE_DN"),
+		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+		fmt.Sprintf("(&(objectClass=user)(objectSid=%s))", sid),
+		[]string{"distinguishedName"},
+		nil,
+	)
+
+	sr, err := ldapConn.Search(searchRequest)
+	if err != nil {
+		return fmt.Errorf("failed to search LDAP server: %v", err)
+	}
+
+	if len(sr.Entries) == 0 {
+		return fmt.Errorf("no entries found for user with SID %s", sid)
+	}
+
+	entry := sr.Entries[0]
+
+	dn := entry.GetAttributeValue("distinguishedName")
+
+	modifyRequest := ldap.NewModifyRequest(dn, nil)
+	modifyRequest.Replace("unicodePwd", []string{fmt.Sprintf("\"%s\"", password)})
+
+	err = ldapConn.Modify(modifyRequest)
+	if err != nil {
+		return fmt.Errorf("failed to reset password: %v", err)
+	}
+
+	return nil
+
+}
+
+func getCNs(memberOf []string) []string {
 	var groups []string
 
 	// Get only the CN= and not the OU=
@@ -133,9 +215,5 @@ func fetchUserInfo(ldapConn *ldap.Conn, username string) ([]string, string, stri
 		}
 	}
 
-	// Extract the SID
-	objectSid := entry.GetRawAttributeValue("objectSid")
-	sidString := sidToString(objectSid)
-
-	return groups, fullName, description, sidString, err
+	return groups
 }

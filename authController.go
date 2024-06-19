@@ -38,14 +38,14 @@ func Login(c echo.Context) error {
 	isAdmin := checkIfAdmin(groups)
 
 	// Create a JWT token
-	token, err := generateToken(SID, fullName, studentId, isAdmin)
+	token, err := generateLoginToken(SID, fullName, studentId, isAdmin)
 	if err != nil {
 		log.Println(err)
 		return c.String(http.StatusInternalServerError, "Login failed")
 	}
 
 	// Save token in database
-	err = saveTokenInDB(token, username)
+	err = saveLoginTokenInDB(token, username)
 	if err != nil {
 		log.Println(err)
 		return c.String(http.StatusInternalServerError, "Login failed")
@@ -63,6 +63,90 @@ func Login(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, response)
+}
+
+func ResetRequest(c echo.Context) error {
+	email := c.FormValue("email")
+
+	_, _, _, userName, _, err := fetchUserInfoWithEmail(email)
+	if err != nil {
+		log.Println(err)
+		return c.String(http.StatusNotFound, "Email not found")
+	}
+
+	if userName == "" {
+		return c.String(http.StatusNotFound, "Email not found")
+	}
+
+	err = removeTokensFromUser(userName)
+	if err != nil {
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, "Failed to remove old tokens from user")
+	}
+
+	token := jwt.New(jwt.SigningMethodHS256)
+	claims := token.Claims.(jwt.MapClaims)
+	claims["email"] = email
+	claims["exp"] = time.Now().Add(time.Hour * 1).Unix()
+
+	t, err := token.SignedString([]byte(getEnvVar("JWT_SECRET")))
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Failed to generate token")
+	}
+
+	// Send email with reset instructions in the background
+	go func() {
+		sendEmailNotification(email, "Password reset", fmt.Sprintf("Click the following link to reset your password: %s/auth/resetPassword?token=%s", getEnvVar("FRONTEND_URL"), t))
+	}()
+
+	return c.String(http.StatusOK, "Email sent with reset instructions")
+}
+
+func ResetPassword(c echo.Context) error {
+	token := c.FormValue("token")
+	password := c.FormValue("password")
+
+	// get the JWT secret from the environment
+	jwtSecret := getEnvVar("JWT_SECRET")
+
+	// parse the token
+	t, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+		return []byte(jwtSecret), nil
+	})
+
+	if err != nil {
+		return c.String(http.StatusUnauthorized, "Token is invalid")
+	}
+
+	// check if the token is valid
+	if !t.Valid {
+		return c.String(http.StatusUnauthorized, "Token is invalid")
+	}
+
+	// check if the token is expired
+	claims, ok := t.Claims.(jwt.MapClaims)
+	if !ok {
+		return c.String(http.StatusUnauthorized, "Token is invalid")
+	}
+
+	if claims["email"] == nil {
+		return c.String(http.StatusUnauthorized, "Token is invalid")
+	}
+
+	email := claims["email"].(string)
+
+	// get the username associated with the email
+	_, _, sid, _, _, err := fetchUserInfoWithEmail(email)
+	if err != nil {
+		return c.String(http.StatusNotFound, "Email not found")
+	}
+
+	err = resetPasswordOfSidUser(sid, password)
+	if err != nil {
+		return err
+	}
+
+	return c.String(http.StatusOK, "Password has been reset")
 }
 
 func sidToString(sid []byte) string {
@@ -94,7 +178,7 @@ func checkIfAdmin(groups []string) bool {
 	return false
 }
 
-func generateToken(SID string, fullName string, studentId string, admin bool) (string, error) {
+func generateLoginToken(SID string, fullName string, studentId string, admin bool) (string, error) {
 	// Create JWT token
 	token := jwt.New(jwt.SigningMethodHS256)
 	claims := token.Claims.(jwt.MapClaims)
@@ -114,7 +198,7 @@ func generateToken(SID string, fullName string, studentId string, admin bool) (s
 
 }
 
-func saveTokenInDB(token string, username string) error {
+func saveLoginTokenInDB(token string, username string) error {
 	// Save token in database
 	db, err := connectToDB()
 	if err != nil {
@@ -136,7 +220,26 @@ func saveTokenInDB(token string, username string) error {
 	return nil
 }
 
-func removeOldTokensFromDB(c echo.Context) error {
+func removeTokensFromUser(userName string) error {
+	db, err := connectToDB()
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec("DELETE FROM user_tokens WHERE belongs_to = ?", userName)
+	if err != nil {
+		return err
+	}
+
+	err = db.Close()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func RemoveOldTokensFromDB(c echo.Context) error {
 	// Remove tokens that have expired
 	db, err := connectToDB()
 	if err != nil {
@@ -200,7 +303,7 @@ func getUserAssociatedWithJWT(c echo.Context) (string, bool, string, string) {
 	return claims["sid"].(string), claims["admin"].(bool), claims["givenName"].(string), claims["studentId"].(string)
 }
 
-func checkIfTokenIsValid(c echo.Context) error {
+func CheckIfLoginTokenIsValid(c echo.Context) error {
 	token := formatJWTfromBearer(c)
 
 	// check if the token exists in the database
