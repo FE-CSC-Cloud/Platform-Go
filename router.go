@@ -33,7 +33,7 @@ func main() {
 	d.Use(checkIfLoggedIn)
 
 	d.GET("", GetDnsZones)
-	d.POST(":serverId", CreateDnsRecord)
+	d.POST("/:serverId", CreateDnsRecord)
 
 	// TODO: array met template IDs cachen (fetchTemplateLibraryIdsFromVCenter)
 	// TODO: JSON het zelfde maken als de Laravel JSON

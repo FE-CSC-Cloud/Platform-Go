@@ -60,31 +60,45 @@ func CreateDnsRecord(c echo.Context) error {
 	type RequestBody struct {
 		Subdomain   string `json:"subdomain"`
 		Parent      string `json:"parent"`
-		ServerId    string `json:"serverId"`
 		RecordValue string `json:"recordValue"`
 		Ttl         string `json:"ttl"`
 		Type        string `json:"type"`
 	}
 
+	serverId := c.Param("serverId")
+
 	request := new(RequestBody)
 	if err := c.Bind(request); err != nil {
-		return err
+		log.Println("Error binding request: ", err)
+		return c.JSON(400, "could not bind request")
 	}
 
-	err := createRecordForSubInDB(request.Subdomain, request.Parent, request.ServerId)
+	sid, isAdmin, _, _ := getUserAssociatedWithJWT(c)
+	if !isAdmin {
+		db, err := connectToDB()
+		if err != nil {
+			log.Println("Error connecting to database: ", err)
+			return c.JSON(500, "could not connect to database")
+		}
+		if !checkIfServerBelongsToUser(sid, serverId, db) {
+			c.JSON(418, "BOOOOOO")
+		}
+	}
+
+	errDNS := createRecordInDNS(request.Parent, request.Subdomain, request.Ttl, request.Type, request.RecordValue)
+	if errDNS != "" {
+		return c.JSON(500, errDNS)
+	}
+
+	err := createRecordForSubInDB(request.Subdomain, request.Parent, serverId)
 	if err != nil {
 		return c.JSON(500, "could not create record in database")
-	}
-
-	err = createRecordInDNS(request.Parent, request.Subdomain, request.Ttl, request.Type, request.RecordValue)
-	if err != nil {
-		return c.JSON(500, err)
 	}
 
 	return c.JSON(200, "record created")
 }
 
-func createRecordForSubInDB(subdomain, parent, VM string) error {
+func createRecordForSubInDB(parent, subdomain, VM string) error {
 	db, err := connectToDB()
 	if err != nil {
 		log.Println("Error connecting to database: ", err)
@@ -99,10 +113,10 @@ func createRecordForSubInDB(subdomain, parent, VM string) error {
 	return nil
 }
 
-func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) error {
+func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) string {
 	queries := [][]string{
 		{"zone", zone},
-		{"domain", domain},
+		{"domain", domain + "." + zone},
 		{"overwrite", "false"},
 		{"ttl", ttl},
 		{"type", recordType},
@@ -112,14 +126,14 @@ func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) error 
 	case "A":
 		{
 			if !isIPv4(recordValue) {
-				return fmt.Errorf("only ipv4 addresses are allowed for A records")
+				return "only ipv4 addresses are allowed for A records"
 			}
 			queries = append(queries, []string{"ipAddress", recordValue})
 		}
 	case "AAAA":
 		{
 			if !isIPv6(recordValue) {
-				return fmt.Errorf("only ipv6 addresses are allowed for AAAA records")
+				return "only ipv6 addresses are allowed for AAAA records"
 			}
 			queries = append(queries, []string{"ipAddress", recordValue})
 		}
@@ -128,7 +142,7 @@ func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) error 
 			// split the record value into priority and mail server with spaces
 			split := splitRecordValue(recordValue)
 			if len(split) != 2 {
-				return fmt.Errorf("invalid record value, only 2 values split by spaces are allowed for MX records")
+				return "invalid record value, only 2 values split by spaces are allowed for MX records"
 			}
 			queries = append(queries, []string{"preference", split[0]}, []string{"exchange", split[1]})
 		}
@@ -137,7 +151,7 @@ func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) error 
 			// split the record value into priority, weight, port and target with spaces
 			split := splitRecordValue(recordValue)
 			if len(split) != 4 {
-				return fmt.Errorf("invalid record value, only 4 values split by spaces are allowed for SRV records")
+				return "invalid record value, only 4 values split by spaces are allowed for SRV records"
 			}
 			queries = append(queries, []string{"priority", split[0]}, []string{"weight", split[1]}, []string{"port", split[2]}, []string{"target", split[3]})
 		}
@@ -146,7 +160,7 @@ func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) error 
 			// split the record value into flags, tag and value with spaces
 			split := splitRecordValue(recordValue)
 			if len(split) != 3 {
-				return fmt.Errorf("invalid record value, only 3 values split by spaces are allowed for CAA records")
+				return "invalid record value, only 3 values split by spaces are allowed for CAA records"
 			}
 
 			queries = append(queries, []string{"flags", split[0]}, []string{"tag", split[1]}, []string{"value", split[2]})
@@ -162,16 +176,16 @@ func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) error 
 	case "ANAME":
 		queries = append(queries, []string{"aname", recordValue})
 	default:
-		return fmt.Errorf("invalid record type")
+		return "invalid record type"
 	}
 
-	_, err := authenticatedDNSRequest("records/add", queries)
+	_, err := authenticatedDNSRequest("zones/records/add", queries)
 	if err != nil {
 		log.Println("Error creating record in DNS: ", err)
-		return fmt.Errorf("internal server error")
+		return "internal server error"
 	}
 
-	return nil
+	return ""
 }
 
 func splitRecordValue(recordValue string) []string {

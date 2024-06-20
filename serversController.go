@@ -605,3 +605,17 @@ func checkIfUserAlreadyHasServerWithName(name, userID string, db *sql.DB) bool {
 
 	return true
 }
+
+func checkIfServerBelongsToUser(serverID, userID string, db *sql.DB) bool {
+	rows, err := db.Query("SELECT id FROM virtual_machines WHERE id = ? AND users_id = ?", serverID, userID)
+	if err != nil {
+		log.Println("Could not check if the server belongs to the user err: ", err)
+		return false
+	}
+
+	if !rows.Next() {
+		return false
+	}
+
+	return true
+}
