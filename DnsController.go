@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/labstack/echo/v4"
 	"log"
+	"strings"
 )
 
 type Zone struct {
@@ -122,6 +123,36 @@ func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) error 
 			}
 			queries = append(queries, []string{"ipAddress", recordValue})
 		}
+	case "MX":
+		{
+			// split the record value into priority and mail server with spaces
+			split := splitRecordValue(recordValue)
+			if len(split) != 2 {
+				return fmt.Errorf("invalid record value, only 2 values split by spaces are allowed for MX records")
+			}
+			queries = append(queries, []string{"preference", split[0]}, []string{"exchange", split[1]})
+		}
+	case "SRV":
+		{
+			// split the record value into priority, weight, port and target with spaces
+			split := splitRecordValue(recordValue)
+			if len(split) != 4 {
+				return fmt.Errorf("invalid record value, only 4 values split by spaces are allowed for SRV records")
+			}
+			queries = append(queries, []string{"priority", split[0]}, []string{"weight", split[1]}, []string{"port", split[2]}, []string{"target", split[3]})
+		}
+	case "CAA":
+		{
+			// split the record value into flags, tag and value with spaces
+			split := splitRecordValue(recordValue)
+			if len(split) != 3 {
+				return fmt.Errorf("invalid record value, only 3 values split by spaces are allowed for CAA records")
+			}
+
+			queries = append(queries, []string{"flags", split[0]}, []string{"tag", split[1]}, []string{"value", split[2]})
+		}
+	case "PTR":
+		queries = append(queries, []string{"ptrName", recordValue})
 	case "CNAME":
 		queries = append(queries, []string{"cname", recordValue})
 	case "TXT":
@@ -141,4 +172,8 @@ func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) error 
 	}
 
 	return nil
+}
+
+func splitRecordValue(recordValue string) []string {
+	return strings.Split(recordValue, " ")
 }
