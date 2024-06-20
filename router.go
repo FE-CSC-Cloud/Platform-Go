@@ -9,12 +9,10 @@ import (
 
 func main() {
 	e := echo.New()
-
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
 	}))
-
 	e.GET("/", func(c echo.Context) error { return c.String(http.StatusTeapot, "I'm a teapot") })
 
 	s := e.Group("/servers")
@@ -30,6 +28,12 @@ func main() {
 	s.GET("/:id", GetServers)
 
 	s.DELETE("/:id", DeleteServer)
+
+	d := e.Group("/dns")
+	d.Use(checkIfLoggedIn)
+
+	d.GET("", GetDnsZones)
+	d.POST(":serverId", CreateDnsRecord)
 
 	// TODO: array met template IDs cachen (fetchTemplateLibraryIdsFromVCenter)
 	// TODO: JSON het zelfde maken als de Laravel JSON
@@ -55,7 +59,6 @@ func main() {
 	e.GET("/templates", GetTemplates)
 
 	g := e.Group("/admin")
-
 	g.Use(checkIfLoggedInAsAdmin)
 
 	g.POST("/ipAdresses", CreateIpAdress)
@@ -65,17 +68,17 @@ func main() {
 	g.GET("/dataStores/refresh", RefreshDataStores)
 
 	a := e.Group("/auth")
+
 	a.POST("/login", Login)
 	a.POST("/resetRequest", ResetRequest)
 	a.POST("/resetPassword", ResetPassword)
+	e.GET("checkIfLoginTokenIsValid", CheckIfLoginTokenIsValid)
 
 	n := e.Group("/notifications")
 	n.Use(checkIfLoggedIn)
 
 	n.GET("", GetNotifications)
 	n.PATCH("/:id", MarkNotificationAsRead)
-
-	e.GET("CheckIfLoginTokenIsValid", CheckIfLoginTokenIsValid)
 
 	e.Logger.Fatal(e.Start(":" + getEnvVar("APP_PORT")))
 }

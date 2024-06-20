@@ -27,3 +27,34 @@ func ip2long(ip string) uint32 {
 	ipLong, _ := strconv.ParseUint(strings.Join(strings.Split(ip, "."), ""), 10, 32)
 	return uint32(ipLong)
 }
+
+func isIPv4(ip string) bool {
+	parts := strings.Split(ip, ".")
+	if len(parts) != 4 {
+		return false
+	}
+
+	for _, part := range parts {
+		num, err := strconv.Atoi(part)
+		if err != nil || num < 0 || num > 255 {
+			return false
+		}
+	}
+
+	return true
+}
+
+func isIPv6(ip string) bool {
+	parts := strings.Split(ip, ":")
+	if len(parts) != 8 {
+		return false
+	}
+
+	for _, part := range parts {
+		if len(part) > 4 {
+			return false
+		}
+	}
+
+	return true
+}
