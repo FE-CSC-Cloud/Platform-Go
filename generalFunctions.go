@@ -43,18 +43,3 @@ func isIPv4(ip string) bool {
 
 	return true
 }
-
-func isIPv6(ip string) bool {
-	parts := strings.Split(ip, ":")
-	if len(parts) != 8 {
-		return false
-	}
-
-	for _, part := range parts {
-		if len(part) > 4 {
-			return false
-		}
-	}
-
-	return true
-}

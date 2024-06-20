@@ -130,13 +130,6 @@ func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) string
 			}
 			queries = append(queries, []string{"ipAddress", recordValue})
 		}
-	case "AAAA":
-		{
-			if !isIPv6(recordValue) {
-				return "only ipv6 addresses are allowed for AAAA records"
-			}
-			queries = append(queries, []string{"ipAddress", recordValue})
-		}
 	case "MX":
 		{
 			// split the record value into priority and mail server with spaces
@@ -165,6 +158,8 @@ func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) string
 
 			queries = append(queries, []string{"flags", split[0]}, []string{"tag", split[1]}, []string{"value", split[2]})
 		}
+	case "AAAA":
+		queries = append(queries, []string{"ipAddress", recordValue})
 	case "PTR":
 		queries = append(queries, []string{"ptrName", recordValue})
 	case "CNAME":
