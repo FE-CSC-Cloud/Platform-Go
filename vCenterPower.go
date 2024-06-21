@@ -14,6 +14,7 @@ func powerOn(session, id string) bool {
 	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=start", nil)
 	if err != nil {
 		log.Println("Error creating request: ", err)
+		return false
 	}
 
 	req.Header.Add("vmware-api-session-id", session)
@@ -41,6 +42,7 @@ func powerOff(session, id string) bool {
 	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=shutdown", nil)
 	if err != nil {
 		log.Println("Error creating request: ", err)
+		return false
 	}
 
 	req.Header.Add("vmware-api-session-id", session)
@@ -49,8 +51,10 @@ func powerOff(session, id string) bool {
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Println("Error sending request: ", err)
+		return false
 	}
 
+	log.Println(resp.StatusCode)
 	if resp.StatusCode != 204 && resp.StatusCode != 400 {
 		return false
 	}

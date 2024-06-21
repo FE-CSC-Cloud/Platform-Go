@@ -10,8 +10,7 @@ import (
 func main() {
 	e := echo.New()
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"*"},
-		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
+		AllowHeaders: []string{"*"},
 	}))
 	e.GET("/", func(c echo.Context) error { return c.String(http.StatusTeapot, "I'm a teapot") })
 
@@ -79,7 +78,7 @@ func main() {
 	n.Use(checkIfLoggedIn)
 
 	n.GET("", GetNotifications)
-	n.PATCH("/:id", MarkNotificationAsRead)
+	n.PATCH("/:id", ChangeReadStatusOfNotification)
 
 	e.Logger.Fatal(e.Start(":" + getEnvVar("APP_PORT")))
 }

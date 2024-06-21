@@ -221,6 +221,7 @@ func PowerServer(c echo.Context) error {
 	db, err := connectToDB()
 	if err != nil {
 		log.Println("Error connecting to database: ", err)
+		return c.JSON(http.StatusInternalServerError, "error in the program, please try again later")
 	}
 
 	userId, isAdmin, _, _ := getUserAssociatedWithJWT(c)
@@ -236,6 +237,8 @@ func PowerServer(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, "Can't find server with that ID")
 	}
+
+	log.Println("vCenterID: ", vCenterID)
 
 	session := getVCenterSession()
 	status = strings.ToUpper(status)
@@ -370,11 +373,17 @@ func CreateServer(c echo.Context) error {
 		}
 
 		_, _, _, studentEmail, err := fetchUserInfoWithSID(UserId)
+		if err != nil {
+			log.Println("Error fetching user info: ", err)
+		}
 
 		serverCreationSuccessTitle := "Server is gemaakt"
 		serverCreationSuccessBody := "Je server(" + jsonBody.Name + ") is gemaakt met het ip: " + ip + " je gebruikersnaam is: " + firstName + " en je wachtwoord is: " + firstName + " verander dit aub zo snel mogelijk!"
-		sendEmailNotification(studentEmail, serverCreationSuccessTitle, serverCreationSuccessBody)
+		// check if the email is not empty
 		createNotificationForUser(db, UserId, serverCreationSuccessTitle, serverCreationSuccessBody)
+		if studentEmail != "" {
+			sendEmailNotification(studentEmail, serverCreationSuccessTitle, serverCreationSuccessBody)
+		}
 	}()
 
 	return c.JSON(http.StatusCreated, "Server is being made!")
@@ -499,7 +508,7 @@ func addUsersToFirewall(studentID string, json serverCreationJsonBody) error {
 func readStartScript(templateName string) (startScript, error) {
 	workingDir, err := os.Getwd()
 	// check if the file exists
-	file, err := os.Open(workingDir + "\\startScripts\\" + templateName + ".json")
+	file, err := os.Open(workingDir + "/startScripts/" + templateName + ".json")
 	if err != nil {
 		return startScript{}, err
 	}

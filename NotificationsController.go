@@ -19,7 +19,7 @@ func GetNotifications(c echo.Context) error {
 	return c.JSON(http.StatusOK, notifications)
 }
 
-func MarkNotificationAsRead(c echo.Context) error {
+func ChangeReadStatusOfNotification(c echo.Context) error {
 	studentID, _, _, _ := getUserAssociatedWithJWT(c)
 	db, err := connectToDB()
 	if err != nil {
@@ -29,11 +29,11 @@ func MarkNotificationAsRead(c echo.Context) error {
 
 	notificationID := c.Param("id")
 
-	_, err = db.Exec("UPDATE notifications SET read_notif = 1 WHERE user_id = ? AND id = ?", studentID, notificationID)
+	_, err = db.Exec("UPDATE notifications SET read_notif = IF(read_notif = 1, 0, 1) WHERE user_id = ? AND id = ?", studentID, notificationID)
 	if err != nil {
 		log.Println("Error executing query: ", err)
 		return c.String(http.StatusInternalServerError, "Internal server error")
 	}
 
-	return c.String(http.StatusOK, "Notification marked as read")
+	return c.String(http.StatusOK, "Notification status updated")
 }
