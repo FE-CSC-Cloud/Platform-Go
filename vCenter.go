@@ -36,7 +36,7 @@ func getPowerStatusFromvCenter(session, vmID string) []vCenterServers {
 	// Create a new request
 	req, err := http.NewRequest("GET", baseURL+"/api/vcenter/vm/"+vmID, nil)
 	if err != nil {
-		log.Fatal("Error creating request: ", err)
+		log.Println("Error creating request: ", err)
 	}
 
 	req.Header.Add("vmware-api-session-id", session)
@@ -44,19 +44,19 @@ func getPowerStatusFromvCenter(session, vmID string) []vCenterServers {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Error sending request: ", err)
+		log.Println("Error sending request: ", err)
 	}
 
 	// Read the response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal("Error reading response: ", err)
+		log.Println("Error reading response: ", err)
 	}
 
 	var servers []vCenterServers
 	err = json.Unmarshal(body, &servers)
 	if err != nil {
-		log.Fatal("Error unmarshalling response: ", err)
+		log.Println("Error unmarshalling response: ", err)
 	}
 
 	defer resp.Body.Close()
@@ -128,7 +128,7 @@ func createvCenterVM(session, studentID, vmName, templateName string, storage, m
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Error sending request: ", err)
+		log.Println("Error sending request: ", err)
 	}
 
 	// Read the response
@@ -160,7 +160,7 @@ func deletevCenterVM(session, vmID string) bool {
 
 	req, err := http.NewRequest("DELETE", baseURL+"/api/vcenter/vm/"+vmID, nil)
 	if err != nil {
-		log.Fatal("Error creating request: ", err)
+		log.Println("Error creating request: ", err)
 	}
 
 	req.Header.Add("vmware-api-session-id", session)
@@ -168,7 +168,7 @@ func deletevCenterVM(session, vmID string) bool {
 	// Send the request to delete the VM
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Error sending request: ", err)
+		log.Println("Error sending request: ", err)
 	}
 
 	if resp.StatusCode != 204 {

@@ -88,6 +88,8 @@ CREATE TABLE `subDomains`
     `virtual_machines_id` INT          NOT NULL,
     `parentDomain`        VARCHAR(255) NOT NULL,
     `subDomain`           VARCHAR(255) NOT NULL,
+    `recordType`          VARCHAR(5) NOT NULL,
+    `recordValue`         VARCHAR(255) NOT NULL,
     PRIMARY KEY (`id`)
 ) ENGINE = InnoDB;
 

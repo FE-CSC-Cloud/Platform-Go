@@ -44,7 +44,7 @@ func vCenterFetchSession() string {
 	// Create a new request to get a new session ID
 	req, err := http.NewRequest("POST", baseURL+"/api/session", nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	req.SetBasicAuth(user, pass)
@@ -53,13 +53,13 @@ func vCenterFetchSession() string {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	// handle error_type UNAUTHENTICATED from vCenter
@@ -69,7 +69,7 @@ func vCenterFetchSession() string {
 
 	err = json.Unmarshal(body, &sessionID)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	return sessionID
@@ -81,7 +81,7 @@ func checkIfvCenterSessionIsExpired(sessionID string) bool {
 	// Create a new request to check if the session ID is still valid
 	req, err := http.NewRequest("GET", getEnvVar("VCENTER_URL")+"/api/session", nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	user := getEnvVar("VCENTER_USER")
@@ -94,7 +94,7 @@ func checkIfvCenterSessionIsExpired(sessionID string) bool {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	defer resp.Body.Close()

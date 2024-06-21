@@ -65,7 +65,7 @@ func sendEmailNotification(to, title, message string) {
 		// Connect to the SMTP Server
 		c, err := smtp.Dial(host + ":" + port)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
 		}
 
 		// Upgrade to SSL
@@ -74,7 +74,7 @@ func sendEmailNotification(to, title, message string) {
 			ServerName:         host,
 		}
 		if err := c.StartTLS(tlsconfig); err != nil {
-			log.Fatal(err)
+			log.Println(err)
 		}
 
 		sendMail(c, from, to, m, auth)
@@ -87,12 +87,12 @@ func sendEmailNotification(to, title, message string) {
 
 		conn, err := tls.Dial("tcp", host+":"+port, tlsconfig)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
 		}
 
 		c, err := smtp.NewClient(conn, host)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
 		}
 
 		sendMail(c, from, to, m, auth)
@@ -100,12 +100,12 @@ func sendEmailNotification(to, title, message string) {
 		// Connect to the SMTP Server
 		conn, err := net.Dial("tcp", host+":"+port)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
 		}
 
 		c, err := smtp.NewClient(conn, host)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
 		}
 
 		// Upgrade to TLS
@@ -114,7 +114,7 @@ func sendEmailNotification(to, title, message string) {
 			ServerName:         host,
 		}
 		if err := c.StartTLS(tlsconfig); err != nil {
-			log.Fatal(err)
+			log.Println(err)
 		}
 
 		sendMail(c, from, to, m, auth)
@@ -122,7 +122,7 @@ func sendEmailNotification(to, title, message string) {
 		// Connect to the SMTP Server
 		c, err := smtp.Dial(host + ":" + port)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
 		}
 
 		sendMail(c, from, to, m, auth)
@@ -131,30 +131,30 @@ func sendEmailNotification(to, title, message string) {
 
 func sendMail(c *smtp.Client, from string, to string, m string, auth smtp.Auth) {
 	if err := c.Auth(auth); err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	if err := c.Mail(from); err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	if err := c.Rcpt(to); err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	w, err := c.Data()
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	_, err = w.Write([]byte(m))
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	err = w.Close()
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	c.Quit()

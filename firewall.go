@@ -43,7 +43,7 @@ func createIPHostInSopohos(ip, studentID, name string) error {
 	// parse response
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	// check if the response is an error
@@ -123,7 +123,7 @@ func createInBoundRuleInSophos(studentId, name string) error {
 	// parse response
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	// check if the response is an error
@@ -167,7 +167,7 @@ func createOutBoundRuleInSophos(studentId, name string) error {
 	// parse response
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	// check if the response is an error
@@ -195,7 +195,7 @@ func updateFirewallRuleGroupInSophos(studentId, name string) error {
 	// parse response
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	// check if the response is an error
@@ -211,7 +211,7 @@ func updateFirewallRuleGroupInSophos(studentId, name string) error {
 func parseAndSetIpListForSophos() {
 	jsonFile, err := os.Open(getEnvVar("IP_LIST"))
 	if err != nil {
-		log.Fatal("could nog open IP list JSON: ", err)
+		log.Println("could nog open IP list JSON: ", err)
 	}
 	defer jsonFile.Close()
 
@@ -307,7 +307,7 @@ func addIpToSophos(studentID, ip string, count int) error {
 	// parse response
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	// check if the response is an error

@@ -43,18 +43,18 @@ func fetchTemplateLibraryIdsFromVCenter(session string) []string {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Error sending request: ", err)
+		log.Println("Error sending request: ", err)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal("Error reading response: ", err)
+		log.Println("Error reading response: ", err)
 	}
 
 	var templates []string
 	err = json.Unmarshal(body, &templates)
 	if err != nil {
-		log.Fatal("Error unmarshalling response: ", err)
+		log.Println("Error unmarshalling response: ", err)
 	}
 
 	defer resp.Body.Close()
@@ -73,7 +73,7 @@ func updateTemplatesFromVCenter(session string, templateIDs []string) {
 		// Create the request
 		req, err := http.NewRequest("GET", baseURL+"/api/content/library/item/"+templateID, nil)
 		if err != nil {
-			log.Fatal("Error creating request:", err)
+			log.Println("Error creating request:", err)
 			return
 		}
 
@@ -84,14 +84,14 @@ func updateTemplatesFromVCenter(session string, templateIDs []string) {
 		// Make the request
 		resp, err := client.Do(req)
 		if err != nil {
-			log.Fatal("Error making request:", err)
+			log.Println("Error making request:", err)
 			return
 		}
 
 		// Read the response body
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			log.Fatal("Error reading response body:", err)
+			log.Println("Error reading response body:", err)
 			return
 		}
 

@@ -24,7 +24,7 @@ func Login(c echo.Context) error {
 
 	ldapConn, err := connectAndBind(username, password)
 	if err != nil {
-		log.Println(err)
+		log.Println("error connecting to LDAP: ", err)
 		return c.String(http.StatusUnauthorized, "Username or password incorrect")
 	}
 	defer ldapConn.Close()
@@ -47,7 +47,7 @@ func Login(c echo.Context) error {
 	// Save token in database
 	err = saveLoginTokenInDB(token, username)
 	if err != nil {
-		log.Println(err)
+		log.Println("Error saving token in database: ", err)
 		return c.String(http.StatusInternalServerError, "Login failed")
 	}
 

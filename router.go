@@ -34,6 +34,7 @@ func main() {
 
 	d.GET("", GetDnsZones)
 	d.POST("/:serverId", CreateDnsRecord)
+	d.DELETE("/:serverId", DeleteDnsRecord)
 
 	// TODO: array met template IDs cachen (fetchTemplateLibraryIdsFromVCenter)
 	// TODO: JSON het zelfde maken als de Laravel JSON

@@ -75,19 +75,19 @@ func GetServers(c echo.Context) error {
 
 	db, err := connectToDB()
 	if err != nil {
-		log.Fatal("Error connecting to database: ", err)
+		log.Println("Error connecting to database: ", err)
 	}
 	defer db.Close()
 
 	rows, err := getServersFromSQL(db, id, UserId, isAdmin)
 	if err != nil {
-		log.Fatal("Error executing query: ", err)
+		log.Println("Error executing query: ", err)
 	}
 	defer rows.Close()
 
 	RowsArr, err := getPowerStatusRows(rows, serversFromVCenter)
 	if err != nil {
-		log.Fatal("Error scanning row: ", err)
+		log.Println("Error scanning row: ", err)
 	}
 
 	if id != "" {
@@ -160,7 +160,7 @@ func DeleteServer(c echo.Context) error {
 	id := c.Param("id")
 	db, err := connectToDB()
 	if err != nil {
-		log.Fatal("Error connecting to database: ", err)
+		log.Println("Error connecting to database: ", err)
 	}
 
 	// get the vCenter ID from the database
@@ -204,12 +204,12 @@ func DeleteServer(c echo.Context) error {
 	// Prepare statement for deleting data
 	stmt, err := db.Prepare("DELETE FROM virtual_machines WHERE id = ?")
 	if err != nil {
-		log.Fatal("Error preparing statement: ", err)
+		log.Println("Error preparing statement: ", err)
 	}
 
 	_, err = stmt.Exec(id)
 	if err != nil {
-		log.Fatal("Error executing statement: ", err)
+		log.Println("Error executing statement: ", err)
 	}
 
 	return c.JSON(http.StatusCreated, "Server deleted!")
@@ -220,7 +220,7 @@ func PowerServer(c echo.Context) error {
 	status := c.Param("status")
 	db, err := connectToDB()
 	if err != nil {
-		log.Fatal("Error connecting to database: ", err)
+		log.Println("Error connecting to database: ", err)
 	}
 
 	userId, isAdmin, _, _ := getUserAssociatedWithJWT(c)

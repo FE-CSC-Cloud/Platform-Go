@@ -55,7 +55,7 @@ func removeIPHostInSophos(studentID, name string) error {
 	// parse response
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	// check if the response is an error
@@ -78,7 +78,7 @@ func removeInBoundRuleInSophos(studentId, name string) error {
 	// parse response
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	// check if the response is an error
@@ -103,7 +103,7 @@ func removeOutBoundRuleInSophos(studentId, name string) error {
 	// parse response
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	// check if the response is an error

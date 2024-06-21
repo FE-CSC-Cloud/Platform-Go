@@ -90,7 +90,9 @@ func CreateDnsRecord(c echo.Context) error {
 		return c.JSON(500, errDNS)
 	}
 
-	err := createRecordForSubInDB(request.Subdomain, request.Parent, serverId)
+	ruleStr := request.Type + " " + request.Subdomain + "." + request.Parent + " " + request.RecordValue
+
+	err := createRecordForSubInDB(request.Parent, request.Subdomain, serverId, ruleStr)
 	if err != nil {
 		return c.JSON(500, "could not create record in database")
 	}
@@ -98,14 +100,22 @@ func CreateDnsRecord(c echo.Context) error {
 	return c.JSON(200, "record created")
 }
 
-func createRecordForSubInDB(parent, subdomain, VM string) error {
+func DeleteDnsRecord(c echo.Context) error {
+	type RequestBody struct {
+		Subdomain string `json:"subdomain"`
+	}
+
+	return c.JSON(200, "record deleted")
+}
+
+func createRecordForSubInDB(parent, subdomain, VM, rule string) error {
 	db, err := connectToDB()
 	if err != nil {
 		log.Println("Error connecting to database: ", err)
 		return err
 	}
 	// create a record for the subdomain in the database
-	_, err = db.Exec("INSERT INTO subDomains (virtual_machines_id, parentDomain, subDomain) VALUES (?, ?, ?)", VM, parent, subdomain)
+	_, err = db.Exec("INSERT INTO subDomains (virtual_machines_id, parentDomain, subDomain, rule) VALUES (?, ?, ?, ?)", VM, parent, subdomain, rule)
 	if err != nil {
 		log.Println("Error inserting subdomain in database: ", err)
 		return err
@@ -185,4 +195,26 @@ func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) string
 
 func splitRecordValue(recordValue string) []string {
 	return strings.Split(recordValue, " ")
+}
+
+func getRecordsInZone(zone string) ([]string, error) {
+	body, err := authenticatedDNSRequest("zones/records/list", [][]string{{"zone", zone}})
+	if err != nil {
+		return nil, err
+	}
+
+	var dnsResponse DNSResponse
+
+	err = json.Unmarshal(body, &dnsResponse)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+
+	var records []string
+	for _, record := range dnsResponse.Response.Zones {
+		records = append(records, record.Name)
+	}
+
+	return records, nil
 }

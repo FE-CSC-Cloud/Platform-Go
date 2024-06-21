@@ -16,7 +16,7 @@ func CreateIpAdress(c echo.Context) error {
 
 	db, err := connectToDB()
 	if err != nil {
-		log.Fatal("Error connecting to database: ", err)
+		log.Println("Error connecting to database: ", err)
 	}
 
 	for _, ip := range ipAddresses {

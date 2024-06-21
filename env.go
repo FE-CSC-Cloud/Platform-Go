@@ -9,7 +9,7 @@ import (
 func getEnvVar(varName string) string {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		log.Println("Error loading .env file")
 	}
 
 	var envVar = os.Getenv(varName)
@@ -20,7 +20,7 @@ func getEnvVar(varName string) string {
 func getBoolEnvVar(varname string) bool {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		log.Println("Error loading .env file")
 	}
 
 	if os.Getenv(varname) == "true" {

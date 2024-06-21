@@ -42,7 +42,7 @@ func updateDataStoreID(session string) string {
 	// https://172.16.1.80/api/vcenter/datastore?names=datastore1
 	req, err := http.NewRequest("GET", baseURL+"/api/vcenter/datastore?names="+getEnvVar("VCENTER_DATASTORE_NAME"), nil)
 	if err != nil {
-		log.Fatal("Error creating request: ", err)
+		log.Println("Error creating request: ", err)
 	}
 
 	// Add the session ID to the request header
@@ -50,17 +50,17 @@ func updateDataStoreID(session string) string {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Error sending request: ", err)
+		log.Println("Error sending request: ", err)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal("Error reading response: ", err)
+		log.Println("Error reading response: ", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		log.Fatal("Error getting data store ID: ", resp)
+		log.Println("Error getting data store ID: ", resp)
 	}
 
 	var dataStores []DataStore

@@ -13,7 +13,7 @@ func powerOn(session, id string) bool {
 
 	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=start", nil)
 	if err != nil {
-		log.Fatal("Error creating request: ", err)
+		log.Println("Error creating request: ", err)
 	}
 
 	req.Header.Add("vmware-api-session-id", session)
@@ -21,7 +21,7 @@ func powerOn(session, id string) bool {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Error sending request: ", err)
+		log.Println("Error sending request: ", err)
 	}
 
 	if resp.StatusCode != 204 && resp.StatusCode != 400 {
@@ -40,7 +40,7 @@ func powerOff(session, id string) bool {
 
 	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=shutdown", nil)
 	if err != nil {
-		log.Fatal("Error creating request: ", err)
+		log.Println("Error creating request: ", err)
 	}
 
 	req.Header.Add("vmware-api-session-id", session)
@@ -48,7 +48,7 @@ func powerOff(session, id string) bool {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Error sending request: ", err)
+		log.Println("Error sending request: ", err)
 	}
 
 	if resp.StatusCode != 204 && resp.StatusCode != 400 {
@@ -67,7 +67,7 @@ func forcePowerOff(session, id string) bool {
 
 	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=stop", nil)
 	if err != nil {
-		log.Fatal("Error creating request: ", err)
+		log.Println("Error creating request: ", err)
 	}
 
 	req.Header.Add("vmware-api-session-id", session)
@@ -75,7 +75,7 @@ func forcePowerOff(session, id string) bool {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Error sending request: ", err)
+		log.Println("Error sending request: ", err)
 	}
 
 	if resp.StatusCode != 204 && resp.StatusCode != 400 {
