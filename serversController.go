@@ -265,6 +265,13 @@ func PowerServer(c echo.Context) error {
 				return c.JSON(http.StatusBadRequest, "Error powering off server")
 			}
 		}
+	case "RESET":
+		{
+			success := reset(session, vCenterID)
+			if !success {
+				return c.JSON(http.StatusBadRequest, "Error resetting server")
+			}
+		}
 	default:
 		return c.JSON(http.StatusBadRequest, "Invalid status")
 	}

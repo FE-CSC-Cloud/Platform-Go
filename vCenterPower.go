@@ -39,7 +39,7 @@ func powerOff(session, id string) bool {
 	client := createVCenterHTTPClient()
 	baseURL := getEnvVar("VCENTER_URL")
 
-	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=shutdown", nil)
+	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=suspend", nil)
 	if err != nil {
 		log.Println("Error creating request: ", err)
 		return false
@@ -54,7 +54,6 @@ func powerOff(session, id string) bool {
 		return false
 	}
 
-	log.Println(resp.StatusCode)
 	if resp.StatusCode != 204 && resp.StatusCode != 400 {
 		return false
 	}
@@ -70,6 +69,33 @@ func forcePowerOff(session, id string) bool {
 	baseURL := getEnvVar("VCENTER_URL")
 
 	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=stop", nil)
+	if err != nil {
+		log.Println("Error creating request: ", err)
+	}
+
+	req.Header.Add("vmware-api-session-id", session)
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println("Error sending request: ", err)
+	}
+
+	if resp.StatusCode != 204 && resp.StatusCode != 400 {
+		return false
+	}
+
+	defer resp.Body.Close()
+
+	return true
+}
+
+func reset(session, id string) bool {
+	defer timeTrack(time.Now(), "reset")
+	client := createVCenterHTTPClient()
+	baseURL := getEnvVar("VCENTER_URL")
+
+	req, err := http.NewRequest("POST", baseURL+"/api/vcenter/vm/"+id+"/power?action=reset", nil)
 	if err != nil {
 		log.Println("Error creating request: ", err)
 	}
