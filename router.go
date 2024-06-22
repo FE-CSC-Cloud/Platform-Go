@@ -72,6 +72,7 @@ func main() {
 	a.POST("/login", Login)
 	a.POST("/resetRequest", ResetRequest)
 	a.POST("/resetPassword", ResetPassword)
+
 	e.GET("checkIfLoginTokenIsValid", CheckIfLoginTokenIsValid)
 
 	n := e.Group("/notifications")

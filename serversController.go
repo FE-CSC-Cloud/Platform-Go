@@ -305,7 +305,7 @@ func CreateServer(c echo.Context) error {
 
 	serverAlreadyExists := checkIfUserAlreadyHasServerWithName(jsonBody.Name, UserId, db)
 	if serverAlreadyExists {
-		return c.JSON(http.StatusOK, "You're already using this name!")
+		return c.JSON(http.StatusConflict, "You're already using this name!")
 	}
 
 	ip := findEmptyIp()
