@@ -312,10 +312,20 @@ func CheckIfLoginTokenIsValid(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, "Failed to connect to database")
 	}
 
-	var tokenFromDB string
-	err = db.QueryRow("SELECT token FROM user_tokens WHERE token = ?", token).Scan(&tokenFromDB)
-	if err != nil {
+	tokenValid := checkTokenAgainstDB(token)
+	if !tokenValid {
 		return c.JSON(http.StatusUnauthorized, "Token is invalid")
+	}
+
+	valid, expired, err := checkJWT(token)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, "Token Invalid")
+	}
+	if !valid {
+		return c.JSON(http.StatusUnauthorized, "Token Invalid")
+	}
+	if expired {
+		return c.JSON(http.StatusUnauthorized, "Token is expired")
 	}
 
 	db.Close()
