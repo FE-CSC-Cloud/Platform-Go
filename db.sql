@@ -82,14 +82,14 @@ CREATE TABLE `ip_adresses`
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_0900_ai_ci;
 
-CREATE TABLE `subDomains`
+CREATE TABLE `sub_domains`
 (
     `id`                  INT          NOT NULL AUTO_INCREMENT,
     `virtual_machines_id` INT          NOT NULL,
-    `parentDomain`        VARCHAR(255) NOT NULL,
-    `subDomain`           VARCHAR(255) NOT NULL,
-    `recordType`          VARCHAR(5) NOT NULL,
-    `recordValue`         VARCHAR(255) NOT NULL,
+    `parent_domain`        VARCHAR(255) NOT NULL,
+    `subdomain`           VARCHAR(255) NOT NULL,
+    `record_type`          VARCHAR(5) NOT NULL,
+    `record_value`         VARCHAR(255) NOT NULL,
     PRIMARY KEY (`id`)
 ) ENGINE = InnoDB;
 

@@ -100,7 +100,8 @@ func createvCenterVM(session, studentID, vmName, templateName string, storage, m
 		HardwareCustomization: HardwareCustomization{
 			DisksToUpdate: map[string]map[string]int{
 				"2000": {
-					"capacity": storage * 1073741824,
+					// storage is in GB, so we need to convert it to bytes and add 1 so it is not exactly the same as the template
+					"capacity": storage*1073741824 + 1,
 				},
 			},
 			MemoryUpdate: map[string]int{
