@@ -125,6 +125,52 @@ func DeleteDnsRecord(c echo.Context) error {
 	return c.JSON(200, "record deleted")
 }
 
+func GetDnsRecordsForServer(c echo.Context) error {
+	serverId := c.Param("serverId")
+
+	if !userIsAllowedToaccessServer(serverId, c) {
+		return c.JSON(http.StatusNotFound, "Server not found")
+	}
+
+	db, err := connectToDB()
+	if err != nil {
+		log.Println("Error connecting to database: ", err)
+		return c.JSON(http.StatusInternalServerError, "could not connect to database")
+	}
+
+	rows, err := db.Query("SELECT virtual_machines_id, parent_domain, subdomain, record_type, record_value FROM sub_domains WHERE virtual_machines_id = ?", serverId)
+	if err != nil {
+		log.Println("Error fetching records from database: ", err)
+		return c.JSON(http.StatusInternalServerError, "could not fetch records from database")
+	}
+
+	var records []map[string]string
+	for rows.Next() {
+		record := make(map[string]string)
+		var (
+			VM                                         int
+			parent, subdomain, recordType, recordValue string
+		)
+		err = rows.Scan(&VM, &parent, &subdomain, &recordType, &recordValue)
+		if err != nil {
+			log.Println("Error scanning rows: ", err)
+			return c.JSON(http.StatusInternalServerError, "could not scan rows")
+		}
+
+		record["parent"] = parent
+		record["subdomain"] = subdomain
+		record["record_type"] = recordType
+		record["record_value"] = recordValue
+		records = append(records, record)
+	}
+
+	if len(records) == 0 {
+		return c.JSON(http.StatusOK, "no records found")
+	}
+
+	return c.JSON(http.StatusOK, records)
+}
+
 func createRecordForSubInDB(parent, subdomain, VM, recordType, recordValue string) error {
 	db, err := connectToDB()
 	if err != nil {

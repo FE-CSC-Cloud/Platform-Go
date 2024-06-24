@@ -32,6 +32,7 @@ func main() {
 	d.Use(checkIfLoggedIn)
 
 	d.GET("", GetDnsZones)
+	d.GET("/server/:serverId", GetDnsRecordsForServer)
 	d.POST("/:serverId", CreateDnsRecord)
 	d.DELETE("/:serverId", DeleteDnsRecord)
 
