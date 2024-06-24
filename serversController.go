@@ -414,6 +414,10 @@ func validateServerCreation(json *serverCreationJsonBody, session string) (bool,
 		return false, "Invalid operating system", time.Time{}
 	}
 
+	if json.Memory <= 2 && json.Storage <= 20 {
+		return false, "NUH UH", time.Time{}
+	}
+
 	// remove spaces from the name
 	json.Name = strings.ReplaceAll(json.Name, " ", "")
 
