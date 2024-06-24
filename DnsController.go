@@ -74,7 +74,7 @@ func CreateDnsRecord(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "could not bind request")
 	}
 
-	if userIsAllowedToaccessServer(serverId, c) {
+	if !userIsAllowedToaccessServer(serverId, c) {
 		return c.JSON(http.StatusNotFound, "Server not found")
 	}
 
@@ -166,8 +166,6 @@ func deleteRecordInDNS(zone, domain, recordType, recordValue string) (string, er
 		{"domain", domain + "." + zone},
 		{"type", recordType},
 	}
-
-	log.Println(queries, recordType, recordValue)
 
 	toQueries, err := appendRecordValueWithCorrectTypeToQueries(queries, recordType, recordValue)
 	if err != nil {
