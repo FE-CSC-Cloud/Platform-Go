@@ -413,7 +413,7 @@ func validateServerCreation(json *serverCreationJsonBody, session string) (bool,
 		return false, "Invalid operating system", time.Time{}
 	}
 
-	if json.Memory <= 2 && json.Storage <= 20 {
+	if json.Memory > 2 || json.Storage > 20 {
 		return false, "NUH UH", time.Time{}
 	}
 
@@ -615,6 +615,20 @@ func checkIfUserAlreadyHasServerWithName(name, userID string, db *sql.DB) bool {
 	rows, err := db.Query("SELECT name FROM virtual_machines WHERE name = ? AND users_id = ?", name, userID)
 	if err != nil {
 		log.Println("Could not check if the nane already exists err: ", err)
+		return true
+	}
+
+	if !rows.Next() {
+		return false
+	}
+
+	return true
+}
+
+func checkIfServerExistsInDB(id string, db *sql.DB) bool {
+	rows, err := db.Query("SELECT id FROM virtual_machines WHERE id = ?", id)
+	if err != nil {
+		log.Println("Could not check if the server exists err: ", err)
 		return true
 	}
 
