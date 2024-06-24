@@ -61,7 +61,7 @@ func CreateDnsRecord(c echo.Context) error {
 	type RequestBody struct {
 		Subdomain   string `json:"subdomain"`
 		Parent      string `json:"parent"`
-		RecordValue string `json:"recordValue"`
+		RecordValue string `json:"record_value"`
 		Ttl         string `json:"ttl"`
 		Type        string `json:"type"`
 	}
@@ -74,16 +74,8 @@ func CreateDnsRecord(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "could not bind request")
 	}
 
-	sid, isAdmin, _, _ := getUserAssociatedWithJWT(c)
-	if !isAdmin {
-		db, err := connectToDB()
-		if err != nil {
-			log.Println("Error connecting to database: ", err)
-			return c.JSON(500, "could not connect to database")
-		}
-		if !checkIfServerBelongsToUser(sid, serverId, db) {
-			c.JSON(http.StatusNotFound, "BOOOOOO")
-		}
+	if userIsAllowedToaccessServer(serverId, c) {
+		return c.JSON(http.StatusNotFound, "Server not found")
 	}
 
 	errDNS := createRecordInDNS(request.Parent, request.Subdomain, request.Ttl, request.Type, request.RecordValue)
@@ -103,8 +95,8 @@ func DeleteDnsRecord(c echo.Context) error {
 	type RequestBody struct {
 		Subdomain   string `json:"subdomain"`
 		Parent      string `json:"parent"`
-		RecordValue string `json:"recordValue"`
-		RecordType  string `json:"recordType"`
+		RecordValue string `json:"record_value"`
+		RecordType  string `json:"type"`
 	}
 
 	serverId := c.Param("serverId")
@@ -115,16 +107,8 @@ func DeleteDnsRecord(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "could not bind request")
 	}
 
-	sid, isAdmin, _, _ := getUserAssociatedWithJWT(c)
-	if !isAdmin {
-		db, err := connectToDB()
-		if err != nil {
-			log.Println("Error connecting to database: ", err)
-			return c.JSON(500, "could not connect to database")
-		}
-		if !checkIfServerBelongsToUser(sid, serverId, db) {
-			c.JSON(http.StatusNotFound, "BOOOOOO")
-		}
+	if !userIsAllowedToaccessServer(serverId, c) {
+		return c.JSON(http.StatusNotFound, "Server not found")
 	}
 
 	err := deleteRecordInDB(request.Parent, request.Subdomain, request.RecordType, request.RecordValue)
@@ -132,9 +116,10 @@ func DeleteDnsRecord(c echo.Context) error {
 		return err
 	}
 
-	errDNS := deleteRecordInDNS(request.Parent, request.Subdomain, request.RecordType, request.RecordValue)
-	if errDNS != "" {
-		return c.JSON(http.StatusInternalServerError, errDNS)
+	_, err = deleteRecordInDNS(request.Parent, request.Subdomain, request.RecordType, request.RecordValue)
+	if err != nil {
+		log.Println("Error deleting record in DNS: ", err)
+		return c.JSON(http.StatusInternalServerError, "could not delete record in DNS")
 	}
 
 	return c.JSON(200, "record deleted")
@@ -175,25 +160,26 @@ func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) string
 	return ""
 }
 
-func deleteRecordInDNS(zone, domain, recordType, recordValue string) string {
+func deleteRecordInDNS(zone, domain, recordType, recordValue string) (string, error) {
 	queries := [][]string{
 		{"zone", zone},
 		{"domain", domain + "." + zone},
 		{"type", recordType},
 	}
 
+	log.Println(queries, recordType, recordValue)
+
 	toQueries, err := appendRecordValueWithCorrectTypeToQueries(queries, recordType, recordValue)
 	if err != nil {
-		return ""
+		return "", err
 	}
 
 	_, err = authenticatedDNSRequest("zones/records/delete", toQueries)
 	if err != nil {
-		log.Println("Error deleting record in DNS: ", err)
-		return "internal server error"
+		return "", err
 	}
 
-	return ""
+	return "", nil
 }
 
 func deleteRecordInDB(parent, subdomain, recordType, recordValue string) error {
@@ -216,7 +202,27 @@ func splitRecordValue(recordValue string) []string {
 	return strings.Split(recordValue, " ")
 }
 
+func userIsAllowedToaccessServer(serverId string, c echo.Context) bool {
+	sid, isAdmin, _, _ := getUserAssociatedWithJWT(c)
+	if isAdmin {
+		db, _ := connectToDB()
+		return checkIfServerExistsInDB(serverId, db)
+	} else {
+		db, err := connectToDB()
+		if err != nil {
+			log.Println("Error connecting to database: ", err)
+			return false
+		}
+		if !checkIfServerBelongsToUser(serverId, sid, db) {
+			return checkIfServerBelongsToUser(serverId, sid, db)
+		}
+	}
+
+	return false
+}
+
 func appendRecordValueWithCorrectTypeToQueries(queries [][]string, recordType, recordValue string) ([][]string, error) {
+
 	switch recordType {
 	case "A":
 		{
