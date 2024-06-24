@@ -124,7 +124,7 @@ func checkTokenAgainstDB(token string) bool {
 	defer db.Close()
 
 	// query the database for the token
-	rows, err := db.Query("SELECT token FROM user_tokens WHERE token = ? and expires_at <= NOW()", token)
+	rows, err := db.Query("SELECT token FROM user_tokens WHERE token = ? and expires_at >= NOW()", token)
 	if err != nil {
 		return false
 	}
