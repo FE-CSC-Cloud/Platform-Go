@@ -166,16 +166,15 @@ func DeleteServer(c echo.Context) error {
 	// get the vCenter ID from the database
 	var (
 		vCenterID  string
-		userID     string
 		serverName string
 	)
 
-	_, isAdmin, _, studentID := getUserAssociatedWithJWT(c)
+	userID, isAdmin, _, studentID := getUserAssociatedWithJWT(c)
 
 	if isAdmin {
-		err = db.QueryRow("SELECT vcenter_id, users_id, name FROM virtual_machines WHERE id = ?", id).Scan(&vCenterID, &userID, &serverName)
+		err = db.QueryRow("SELECT vcenter_id, name FROM virtual_machines WHERE id = ?", id).Scan(&vCenterID, &serverName)
 	} else {
-		err = db.QueryRow("SELECT vcenter_id, users_id, name FROM virtual_machines WHERE id = ? and users_id = ?", id, userID).Scan(&vCenterID, &userID, &serverName)
+		err = db.QueryRow("SELECT vcenter_id, name FROM virtual_machines WHERE id = ? and users_id = ?", id, userID).Scan(&vCenterID, &serverName)
 	}
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, "Can't find server with that ID")
