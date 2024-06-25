@@ -82,6 +82,7 @@ func checkIfvCenterSessionIsExpired(sessionID string) bool {
 	req, err := http.NewRequest("GET", getEnvVar("VCENTER_URL")+"/api/session", nil)
 	if err != nil {
 		log.Println(err)
+		return true
 	}
 
 	user := getEnvVar("VCENTER_USER")
@@ -95,8 +96,8 @@ func checkIfvCenterSessionIsExpired(sessionID string) bool {
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Println(err)
+		return true
 	}
-
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 {
