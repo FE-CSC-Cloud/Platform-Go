@@ -1,11 +1,13 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/labstack/echo/v4"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -25,9 +27,37 @@ type Response struct {
 	Zones []Zone `json:"zones"`
 }
 
-type DNSResponse struct {
+type DNSZonesResponse struct {
 	Response Response `json:"response"`
 	Status   string   `json:"status"`
+}
+
+type Record struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+	TTL  int    `json:"ttl"`
+}
+
+type RecordResponse struct {
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+	TTL   int    `json:"ttl"`
+	RData struct {
+		IpAddress string `json:"ipAddress"`
+	} `json:"rData"`
+	Disabled     bool   `json:"disabled"`
+	DnssecStatus string `json:"dnssecStatus"`
+	LastUsedOn   string `json:"lastUsedOn"`
+}
+
+type DNSResponse struct {
+	Zone    Zone             `json:"zone"`
+	Records []RecordResponse `json:"records"`
+}
+
+type DNSZoneRecordsResponse struct {
+	Response DNSResponse `json:"response"`
+	Status   string      `json:"status"`
 }
 
 func GetDnsZones(c echo.Context) error {
@@ -37,7 +67,7 @@ func GetDnsZones(c echo.Context) error {
 		return c.JSON(500, "could not fetch dns zones")
 	}
 
-	var dnsResponse DNSResponse
+	var dnsResponse DNSZonesResponse
 
 	err = json.Unmarshal(body, &dnsResponse)
 	if err != nil {
@@ -78,15 +108,44 @@ func CreateDnsRecord(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, "Server not found")
 	}
 
+	db, err := connectToDB()
+
+	rows, err := getRecordsForServerFromDB(db, serverId)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, "could not fetch records from database")
+	}
+
+	if rows.Next() {
+		parentSubdomain, err := getParentSubdomainFromDomainRows(rows)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, "could not fetch records from database")
+		}
+
+		// check how many records are in the zone
+		records, err := getRecordsInTechnitium(request.Parent, "", true)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, "could not fetch records in zone")
+		}
+
+		for i := 0; i < len(records); i += 2 { /*
+				log.Println("records[i]: ", records[i])
+				log.Println("parentSubdomain: ", parentSubdomain)*/
+			// check if the record is a subdomain of the parent
+			if !strings.Contains(records[i], parentSubdomain) {
+				return c.JSON(http.StatusBadRequest, "You can't have multiple subdomains for a server")
+			}
+		}
+	}
+
 	errDNS := createRecordInDNS(request.Parent, request.Subdomain, request.Ttl, request.Type, request.RecordValue)
 	if errDNS != "" {
 		return c.JSON(http.StatusInternalServerError, errDNS)
 	}
 
-	err := createRecordForSubInDB(request.Parent, request.Subdomain, serverId, request.Type, request.RecordValue)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "could not create record in database")
-	}
+	/*err = createRecordForSubInDB(request.Parent, request.Subdomain, serverId, request.Type, request.RecordValue)
+	  if err != nil {
+	  	return c.JSON(http.StatusInternalServerError, "could not create record in database")
+	  }*/
 
 	return c.JSON(http.StatusOK, "record created")
 }
@@ -138,9 +197,8 @@ func GetDnsRecordsForServer(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, "could not connect to database")
 	}
 
-	rows, err := db.Query("SELECT virtual_machines_id, parent_domain, subdomain, record_type, record_value FROM sub_domains WHERE virtual_machines_id = ?", serverId)
+	rows, err := getRecordsForServerFromDB(db, serverId)
 	if err != nil {
-		log.Println("Error fetching records from database: ", err)
 		return c.JSON(http.StatusInternalServerError, "could not fetch records from database")
 	}
 
@@ -184,6 +242,16 @@ func createRecordForSubInDB(parent, subdomain, VM, recordType, recordValue strin
 		return err
 	}
 	return nil
+}
+
+func getRecordsForServerFromDB(db *sql.DB, serverId string) (*sql.Rows, error) {
+	rows, err := db.Query("SELECT virtual_machines_id, parent_domain, subdomain, record_type, record_value FROM sub_domains WHERE virtual_machines_id = ?", serverId)
+	if err != nil {
+		log.Println("Error fetching records from database: ", err)
+		return nil, err
+	}
+
+	return rows, nil
 }
 
 func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) string {
@@ -321,14 +389,19 @@ func appendRecordValueWithCorrectTypeToQueries(queries [][]string, recordType, r
 
 	return queries, nil
 }
-
-func getRecordsInZone(zone string) ([]string, error) {
-	body, err := authenticatedDNSRequest("zones/records/list", [][]string{{"zone", zone}})
+func getRecordsInTechnitium(zone, subDomain string, listZone bool) ([]string, error) {
+	var domain string
+	if subDomain == "" {
+		domain = zone
+	} else {
+		domain = subDomain + "." + zone
+	}
+	body, err := authenticatedDNSRequest("zones/records/get", [][]string{{"zone", zone}, {"domain", domain}, {"listZone", strconv.FormatBool(listZone)}})
 	if err != nil {
 		return nil, err
 	}
 
-	var dnsResponse DNSResponse
+	var dnsResponse DNSZoneRecordsResponse
 
 	err = json.Unmarshal(body, &dnsResponse)
 	if err != nil {
@@ -337,9 +410,34 @@ func getRecordsInZone(zone string) ([]string, error) {
 	}
 
 	var records []string
-	for _, record := range dnsResponse.Response.Zones {
-		records = append(records, record.Name)
+	for _, record := range dnsResponse.Response.Records {
+		// TODO: record value toevoegen aan de records
+		records = append(records, []string{record.Name, record.Type}...)
 	}
 
 	return records, nil
+}
+
+func getParentSubdomainFromDomainRows(rows *sql.Rows) (string, error) {
+	var subdomain string
+	// get the length of rows
+	rowsCount := 0
+
+	for rows.Next() {
+		rowsCount++
+		var (
+			parent, sub string
+		)
+		err := rows.Scan(&parent, &sub)
+		if err != nil {
+			return "", err
+		}
+		log.Println("sub: ", sub, "parent: ", parent)
+		if strings.Count(sub, ".") < strings.Count(subdomain, ".") {
+			subdomain = sub
+		}
+	}
+
+	log.Println("rowsCount: ", rowsCount)
+	return subdomain, nil
 }
