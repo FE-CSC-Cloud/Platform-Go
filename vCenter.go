@@ -209,7 +209,7 @@ func runStartScript(session string, startScript startScript, firstName, studentI
 			Password:           startScript.Password,
 		},
 		Spec: Spec{
-			Arguments: startScript.ScriptLocation + " " + studentId + " " + firstName + " " + ip + " " + firstName + " " + vCenterId + " " + vmName,
+			Arguments: startScript.ScriptLocation + " " + studentId + " " + firstName + " " + ip + " " + firstName + " " + " " + vmName,
 			Path:      startScript.ScriptExecutable,
 		},
 	}
