@@ -116,7 +116,7 @@ func UpdateTicket(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, "Failed to connect to database")
 	}
 
-	_, err = db.Exec("UPDATE tickets SET status = ? WHERE user_id = ? AND id = ?", body.Status, UserId, id)
+	_, err = db.Exec("UPDATE tickets SET status = ? WHERE id = ?", body.Status, id)
 	if err != nil {
 		log.Println(err)
 		return c.JSON(http.StatusInternalServerError, "Failed to update ticket")
