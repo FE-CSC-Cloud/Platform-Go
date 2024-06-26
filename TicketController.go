@@ -9,7 +9,7 @@ import (
 
 func GetTickets(c echo.Context) error {
 	id := c.Param("id")
-	UserId, _, _, _ := getUserAssociatedWithJWT(c)
+	UserId, isAdmin, _, _ := getUserAssociatedWithJWT(c)
 
 	db, err := connectToDB()
 	if err != nil {
@@ -20,9 +20,14 @@ func GetTickets(c echo.Context) error {
 
 	if id != "" {
 		rows, err = db.Query("SELECT id, title, message, creator_name, status, created_at FROM tickets WHERE user_id = ? AND id = ?", UserId, id)
+	} else if isAdmin && id != "" {
+		rows, err = db.Query("SELECT id, title, message, creator_name, status, created_at FROM tickets WHERE id = ?", id)
+	} else if isAdmin {
+		rows, err = db.Query("SELECT id, title, message, creator_name, status, created_at FROM tickets")
 	} else {
 		rows, err = db.Query("SELECT id, title, message, creator_name, status, created_at FROM tickets WHERE user_id = ?", UserId)
 	}
+
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, "Failed to fetch tickets")
 	}
