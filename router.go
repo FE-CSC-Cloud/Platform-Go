@@ -82,5 +82,14 @@ func main() {
 	n.GET("", GetNotifications)
 	n.PATCH("/:id", ChangeReadStatusOfNotification)
 
+	tickets := e.Group("/tickets")
+	tickets.Use(checkIfLoggedIn)
+
+	tickets.GET("", GetTickets)
+	tickets.POST("", CreateTicket)
+	tickets.GET("/:id", GetTickets)
+	tickets.PATCH("/:id", UpdateTicket)
+	tickets.DELETE("/:id", DeleteTicket)
+
 	e.Logger.Fatal(e.Start(":" + getEnvVar("APP_PORT")))
 }

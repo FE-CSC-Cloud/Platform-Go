@@ -86,10 +86,10 @@ CREATE TABLE `sub_domains`
 (
     `id`                  INT          NOT NULL AUTO_INCREMENT,
     `virtual_machines_id` INT          NOT NULL,
-    `parent_domain`        VARCHAR(255) NOT NULL,
+    `parent_domain`       VARCHAR(255) NOT NULL,
     `subdomain`           VARCHAR(255) NOT NULL,
-    `record_type`          VARCHAR(5) NOT NULL,
-    `record_value`         VARCHAR(255) NOT NULL,
+    `record_type`         VARCHAR(5)   NOT NULL,
+    `record_value`        VARCHAR(255) NOT NULL,
     PRIMARY KEY (`id`)
 ) ENGINE = InnoDB;
 
@@ -97,13 +97,14 @@ CREATE TABLE `sub_domains`
 
 CREATE TABLE `tickets`
 (
-    `id`         bigint                                   NOT NULL AUTO_INCREMENT,
-    `title`      varchar(255)                             NOT NULL,
-    `user_id`    bigint                                   NOT NULL,
-    `message`    text                                     NOT NULL,
-    `status`     enum ('Pending', 'Accepted', 'Rejected') NOT NULL,
-    `response`   text                                     NOT NULL,
-    `created_at` timestamp                                NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `id`           bigint                                   NOT NULL AUTO_INCREMENT,
+    `title`        varchar(255)                             NOT NULL,
+    `message`      text                                     NOT NULL,
+    `users_id`     text                                     NOT NULL,
+    `creator_name` varchar(255)                             NOT NULL,
+    `status`       enum ('Pending', 'Accepted', 'Rejected') NOT NULL,
+    `response`     text                                     NULL,
+    `created_at`   timestamp                                NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
