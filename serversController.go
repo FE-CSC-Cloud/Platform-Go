@@ -180,26 +180,6 @@ func DeleteServer(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "Can't find server with that ID")
 	}
 
-	// delete the server from sophos
-	err = removeFirewallFromServerInSophos(studentID, serverName)
-	if err != nil {
-		log.Println("Error removing firewall from sophos: ", err)
-		return c.JSON(http.StatusBadRequest, "Error deleting server from sophos")
-	}
-
-	err = unassignIPfromVM(vCenterID)
-	if err != nil {
-		return err
-	}
-
-	// delete the server from vCenter
-	session := getVCenterSession()
-	status := deletevCenterVM(session, vCenterID)
-
-	if !status {
-		return c.JSON(http.StatusBadRequest, "Error deleting server from vCenter")
-	}
-
 	// Prepare statement for deleting data
 	stmt, err := db.Prepare("DELETE FROM virtual_machines WHERE id = ?")
 	if err != nil {
@@ -209,6 +189,27 @@ func DeleteServer(c echo.Context) error {
 	_, err = stmt.Exec(id)
 	if err != nil {
 		log.Println("Error executing statement: ", err)
+		return c.JSON(http.StatusBadRequest, "Error deleting server from database")
+	}
+
+	err = unassignIPfromVM(vCenterID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, "Error unassigning IP from VM")
+	}
+
+	// delete the server from sophos
+	err = removeFirewallFromServerInSophos(studentID, serverName)
+	if err != nil {
+		log.Println("Error removing firewall from sophos: ", err)
+		return c.JSON(http.StatusBadRequest, "Error deleting server from sophos")
+	}
+
+	// delete the server from vCenter
+	session := getVCenterSession()
+	status := deletevCenterVM(session, vCenterID)
+
+	if !status {
+		return c.JSON(http.StatusBadRequest, "Error deleting server from vCenter")
 	}
 
 	return c.JSON(http.StatusCreated, "Server deleted!")
