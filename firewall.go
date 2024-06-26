@@ -148,7 +148,7 @@ func createOutBoundRuleInSophos(studentId, name string) error {
                                         <Zone>LAN</Zone>
                                     </SourceZones>
                                     <SourceNetworks>
-                                        %s
+                                        <Network>OICT-AUTO-HOST-%s-%s</Network>
                                     </SourceNetworks>
                                     <Services>
                                         %s
@@ -160,7 +160,7 @@ func createOutBoundRuleInSophos(studentId, name string) error {
                                     </DestinationNetworks>
                                 </NetworkPolicy>
                             </FirewallRule>
-                        </Set>`, studentId, name, sourceNetworks, outboundServices)
+                        </Set>`, studentId, name, studentId, name, outboundServices)
 
 	resp := doAuthenticatedSophosRequest(xml)
 
