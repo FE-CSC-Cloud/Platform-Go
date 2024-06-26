@@ -29,7 +29,7 @@ func GetTickets(c echo.Context) error {
 	}
 
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "Failed to fetch tickets")
+		return c.JSON(http.StatusNotFound, "Failed to fetch tickets")
 	}
 
 	var tickets []map[string]interface{}
