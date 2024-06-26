@@ -17,15 +17,16 @@ func GetTickets(c echo.Context) error {
 	}
 
 	var rows *sql.Rows
+	order := "ORDER BY FIELD(status, 'Pending', 'Accepted', 'Rejected'), created_at DESC"
 
 	if id != "" {
 		rows, err = db.Query("SELECT id, title, message, creator_name, status, created_at FROM tickets WHERE user_id = ? AND id = ?", UserId, id)
 	} else if isAdmin && id != "" {
 		rows, err = db.Query("SELECT id, title, message, creator_name, status, created_at FROM tickets WHERE id = ?", id)
 	} else if isAdmin {
-		rows, err = db.Query("SELECT id, title, message, creator_name, status, created_at FROM tickets")
+		rows, err = db.Query("SELECT id, title, message, creator_name, status, created_at FROM tickets" + order)
 	} else {
-		rows, err = db.Query("SELECT id, title, message, creator_name, status, created_at FROM tickets WHERE user_id = ?", UserId)
+		rows, err = db.Query("SELECT id, title, message, creator_name, status, created_at FROM tickets WHERE user_id = ?"+order, UserId)
 	}
 
 	if err != nil {
