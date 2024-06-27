@@ -541,16 +541,16 @@ func readStartScript(templateName string) (startScript, error) {
 func handleFailedCreation(serverName, userId, studentId, vCenterId, serverCreationStep string, db *sql.DB) {
 	logErrorInDB(fmt.Errorf("Server creation failed for server: " + serverName + " got stuck at: " + serverCreationStep))
 	if serverCreationStep == "made in db" {
-		deleteServerFromDB(serverName, studentId, db)
+		deleteServerFromDB(serverName, userId, db)
 	}
 
 	if serverCreationStep == "made in vCenter" {
-		deleteServerFromDB(serverName, studentId, db)
+		deleteServerFromDB(serverName, userId, db)
 		deletevCenterVM(getVCenterSession(), vCenterId)
 	}
 
 	if serverCreationStep == "made in sophos" {
-		deleteServerFromDB(serverName, studentId, db)
+		deleteServerFromDB(serverName, userId, db)
 		deletevCenterVM(getVCenterSession(), vCenterId)
 
 		err := removeIPHostInSophos(studentId, serverName)
@@ -568,7 +568,7 @@ func handleFailedCreation(serverName, userId, studentId, vCenterId, serverCreati
 	}
 
 	if serverCreationStep == "made in ip" {
-		deleteServerFromDB(serverName, studentId, db)
+		deleteServerFromDB(serverName, userId, db)
 		deletevCenterVM(getVCenterSession(), vCenterId)
 
 		err := removeIPHostInSophos(studentId, serverName)

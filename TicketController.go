@@ -61,8 +61,9 @@ func GetTickets(c echo.Context) error {
 
 func CreateTicket(c echo.Context) error {
 	type createTicketBody struct {
-		Title   string `json:"title"`
-		Message string `json:"message"`
+		Title    string `json:"title"`
+		Message  string `json:"message"`
+		ServerId *int   `json:"server_id"`
 	}
 
 	var body createTicketBody
@@ -78,7 +79,18 @@ func CreateTicket(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, "Failed to connect to database")
 	}
 
-	_, err = db.Exec("INSERT INTO tickets (title, message, user_id, creator_name, status) VALUES (?, ?, ?, ?, 'Pending')", body.Title, body.Message, UserId, fullName)
+	if body.ServerId == nil {
+		_, err = db.Exec("INSERT INTO tickets (title, message, user_id, creator_name, status) VALUES (?, ?, ?, ?, 'Pending')", body.Title, body.Message, UserId, fullName)
+	} else {
+		// parse the server id to string
+		stringServerId := string(rune(*body.ServerId))
+
+		if !checkIfServerBelongsToUser(UserId, stringServerId, db) {
+			return c.JSON(http.StatusUnauthorized, "You are not allowed to access this server")
+		}
+
+		_, err = db.Exec("INSERT INTO tickets (title, message, user_id, creator_name, status, server_id) VALUES (?, ?, ?, ?, 'Pending', ?)", body.Title, body.Message, UserId, fullName, *body.ServerId)
+	}
 	if err != nil {
 		log.Println(err)
 		return c.JSON(http.StatusInternalServerError, "Failed to create ticket")

@@ -100,10 +100,11 @@ CREATE TABLE `tickets`
     `id`           bigint                                   NOT NULL AUTO_INCREMENT,
     `title`        varchar(255)                             NOT NULL,
     `message`      text                                     NOT NULL,
-    `user_id`     text                                     NOT NULL,
+    `user_id`      text                                     NOT NULL,
     `creator_name` varchar(255)                             NOT NULL,
     `status`       enum ('Pending', 'Accepted', 'Rejected') NOT NULL,
     `response`     text                                     NULL,
+    `server_id`    text                                     NULL,
     `created_at`   timestamp                                NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`)
 ) ENGINE = InnoDB
