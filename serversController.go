@@ -303,6 +303,10 @@ func CreateServer(c echo.Context) error {
 
 	UserId, _, fullName, studentID := getUserAssociatedWithJWT(c)
 
+	if countServersByUser(UserId, db) >= 2 {
+		return c.JSON(http.StatusBadRequest, "You already have 2 servers, you can't create more")
+	}
+
 	serverAlreadyExists := checkIfUserAlreadyHasServerWithName(jsonBody.Name, UserId, db)
 	if serverAlreadyExists {
 		return c.JSON(http.StatusConflict, "You're already using this name!")
@@ -652,4 +656,19 @@ func checkIfServerBelongsToUser(serverID, userID string, db *sql.DB) bool {
 	}
 
 	return true
+}
+
+func countServersByUser(userID string, db *sql.DB) int {
+	rows, err := db.Query("SELECT id FROM virtual_machines WHERE users_id = ?", userID)
+	if err != nil {
+		log.Println("Could not count the servers by user err: ", err)
+		return 0
+	}
+
+	var count int
+	for rows.Next() {
+		count++
+	}
+
+	return count
 }
