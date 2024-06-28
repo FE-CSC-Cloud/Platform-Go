@@ -104,7 +104,7 @@ CREATE TABLE `tickets`
     `creator_name` varchar(255)                             NOT NULL,
     `status`       enum ('Pending', 'Accepted', 'Rejected') NOT NULL,
     `response`     text                                     NULL,
-    `server_id`    text                                     NULL,
+    `server_id`    bigint                                   NULL,
     `created_at`   timestamp                                NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`)
 ) ENGINE = InnoDB

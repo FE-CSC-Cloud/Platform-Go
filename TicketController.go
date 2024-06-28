@@ -1,10 +1,10 @@
 package main
 
 import (
-	"database/sql"
 	"github.com/labstack/echo/v4"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 func GetTickets(c echo.Context) error {
@@ -16,16 +16,28 @@ func GetTickets(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, "Failed to connect to database")
 	}
 
-	var rows *sql.Rows
+	baseQuery := "SELECT tickets.id, title, message, creator_name, status, tickets.created_at, vm.vcenter_id, vm.name, vm.operating_system, vm.end_date, vm.storage, vm.memory, vm.ip FROM tickets JOIN virtual_machines vm on tickets.server_id = vm.id"
+
+	var query string
+	var args []interface{}
 	if id != "" {
-		rows, err = db.Query("SELECT id, title, message, creator_name, status, created_at FROM tickets WHERE user_id = ? AND id = ?", UserId, id)
-	} else if isAdmin && id != "" {
-		rows, err = db.Query("SELECT id, title, message, creator_name, status, created_at FROM tickets WHERE id = ?", id)
-	} else if isAdmin {
-		rows, err = db.Query("SELECT id, title, message, creator_name, status, created_at FROM tickets ORDER BY FIELD(status, 'Pending', 'Accepted', 'Rejected'), created_at DESC")
+		if isAdmin {
+			query = baseQuery + " WHERE tickets.id = ?"
+			args = append(args, id)
+		} else {
+			query = baseQuery + " WHERE user_id = ? AND tickets.id = ?"
+			args = append(args, UserId, id)
+		}
 	} else {
-		rows, err = db.Query("SELECT id, title, message, creator_name, status, created_at FROM tickets WHERE user_id = ? ORDER BY FIELD(status, 'Pending', 'Accepted', 'Rejected'), created_at DESC", UserId)
+		if isAdmin {
+			query = baseQuery + " ORDER BY FIELD(status, 'Pending', 'Accepted', 'Rejected'), created_at DESC"
+		} else {
+			query = baseQuery + " WHERE user_id = ? ORDER BY FIELD(status, 'Pending', 'Accepted', 'Rejected'), created_at DESC"
+			args = append(args, UserId)
+		}
 	}
+
+	rows, err := db.Query(query, args...)
 
 	if err != nil {
 		log.Println(err)
@@ -34,10 +46,16 @@ func GetTickets(c echo.Context) error {
 
 	var tickets []map[string]interface{}
 	for rows.Next() {
-		var id int
-		var title, message, creatorName, status string
-		var createdAt []byte
-		err := rows.Scan(&id, &title, &message, &creatorName, &status, &createdAt)
+		var (
+			id                                  int
+			title, message, creatorName, status string
+			createdAt                           []byte
+
+			vcenterId, name, operatingSystem, endDate, ip string
+			storage, memory                               int
+		)
+
+		err := rows.Scan(&id, &title, &message, &creatorName, &status, &createdAt, &vcenterId, &name, &operatingSystem, &endDate, &storage, &memory, &ip)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -53,6 +71,17 @@ func GetTickets(c echo.Context) error {
 			"creatorName": creatorName,
 			"status":      status,
 			"createdAt":   createdAtStr,
+
+			// This is a nested object
+			"vm": map[string]interface{}{
+				"vcenterId":       vcenterId,
+				"name":            name,
+				"operatingSystem": operatingSystem,
+				"endDate":         endDate,
+				"storage":         storage,
+				"memory":          memory,
+				"ip":              ip,
+			},
 		})
 	}
 
@@ -71,7 +100,7 @@ func CreateTicket(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "Invalid request")
 	}
 
-	UserId, _, fullName, _ := getUserAssociatedWithJWT(c)
+	UserId, isAdmin, fullName, _ := getUserAssociatedWithJWT(c)
 
 	// Create ticket
 	db, err := connectToDB()
@@ -83,9 +112,9 @@ func CreateTicket(c echo.Context) error {
 		_, err = db.Exec("INSERT INTO tickets (title, message, user_id, creator_name, status) VALUES (?, ?, ?, ?, 'Pending')", body.Title, body.Message, UserId, fullName)
 	} else {
 		// parse the server id to string
-		stringServerId := string(rune(*body.ServerId))
+		stringServerId := strconv.Itoa(*body.ServerId)
 
-		if !checkIfServerBelongsToUser(UserId, stringServerId, db) {
+		if !checkIfServerBelongsToUser(UserId, stringServerId, db) && !isAdmin {
 			return c.JSON(http.StatusUnauthorized, "You are not allowed to access this server")
 		}
 
