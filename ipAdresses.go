@@ -35,6 +35,22 @@ func assignIPToVM(ip string, vmID string) error {
 	return nil
 }
 
+func claimIp(ip string) error {
+	db, err := connectToDB()
+	if err != nil {
+		log.Println("Error connecting to database: ", err)
+		return err
+	}
+
+	_, err = db.Exec("UPDATE ip_adresses SET virtual_machine_id = 'claimed' WHERE ip = ?", ip)
+	if err != nil {
+		log.Println("Error executing query: ", err)
+		return err
+	}
+
+	return nil
+}
+
 func getIpFromVM(vmID string) string {
 	db, err := connectToDB()
 	if err != nil {
