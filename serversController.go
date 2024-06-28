@@ -317,6 +317,11 @@ func CreateServer(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "No IP addresses available")
 	}
 
+	err = claimIp(ip)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, "Error claiming IP")
+	}
+
 	err = createServerInDB(UserId, jsonBody, endDate, db)
 	if err != nil {
 		log.Println("Error creating server: ", err)
@@ -328,7 +333,7 @@ func CreateServer(c echo.Context) error {
 		err = updateServerWithVCenterID(vCenterID, jsonBody.Name, UserId, ip, db)
 		if err != nil {
 			logErrorInDB(err)
-			handleFailedCreation(jsonBody.Name, UserId, studentID, "", serverCreationStep, db)
+			handleFailedCreation(jsonBody.Name, UserId, studentID, "", serverCreationStep, ip, db)
 			log.Println("Error updating or making server: ", err)
 			log.Println("vCenter ID: ", vCenterID)
 			return
@@ -338,7 +343,7 @@ func CreateServer(c echo.Context) error {
 		err = createFirewallRuleForServerCreation(ip, studentID, jsonBody.Name)
 		if err != nil {
 			logErrorInDB(err)
-			handleFailedCreation(jsonBody.Name, UserId, studentID, vCenterID, serverCreationStep, db)
+			handleFailedCreation(jsonBody.Name, UserId, studentID, vCenterID, serverCreationStep, ip, db)
 			log.Println("Error creating firewall rules: ", err)
 			return
 		}
@@ -348,7 +353,7 @@ func CreateServer(c echo.Context) error {
 		err = assignIPToVM(ip, vCenterID)
 		if err != nil {
 			logErrorInDB(err)
-			handleFailedCreation(jsonBody.Name, UserId, studentID, vCenterID, serverCreationStep, db)
+			handleFailedCreation(jsonBody.Name, UserId, studentID, vCenterID, serverCreationStep, ip, db)
 			log.Println("Error assigning IP to VM: ", err)
 			return
 		}
@@ -358,7 +363,7 @@ func CreateServer(c echo.Context) error {
 		err = addUsersToFirewall(studentID, *jsonBody)
 		if err != nil {
 			logErrorInDB(err)
-			handleFailedCreation(jsonBody.Name, UserId, studentID, vCenterID, serverCreationStep, db)
+			handleFailedCreation(jsonBody.Name, UserId, studentID, vCenterID, serverCreationStep, ip, db)
 			log.Println("Error adding ips to firewall: ", err)
 			return
 		}
@@ -378,7 +383,7 @@ func CreateServer(c echo.Context) error {
 		err = runStartScript(session, startScript, firstName, studentID, vCenterID, ip, jsonBody.Name)
 		if err != nil {
 			logErrorInDB(err)
-			handleFailedCreation(jsonBody.Name, UserId, studentID, vCenterID, serverCreationStep, db)
+			handleFailedCreation(jsonBody.Name, UserId, studentID, vCenterID, serverCreationStep, ip, db)
 			log.Println("Error running script in VM: ", err)
 			return
 		}
@@ -542,8 +547,13 @@ func readStartScript(templateName string) (startScript, error) {
 	return script, nil
 }
 
-func handleFailedCreation(serverName, userId, studentId, vCenterId, serverCreationStep string, db *sql.DB) {
+func handleFailedCreation(serverName, userId, studentId, vCenterId, serverCreationStep, ip string, db *sql.DB) {
 	logErrorInDB(fmt.Errorf("Server creation failed for server: " + serverName + " got stuck at: " + serverCreationStep))
+	err := unassignIPfromVM(vCenterId)
+	if err != nil {
+		log.Println("Error unassigning IP from VM: ", err)
+	}
+
 	if serverCreationStep == "made in db" {
 		deleteServerFromDB(serverName, userId, db)
 	}
@@ -586,11 +596,6 @@ func handleFailedCreation(serverName, userId, studentId, vCenterId, serverCreati
 		err = removeOutBoundRuleInSophos(studentId, serverName)
 		if err != nil {
 			log.Println("Error removing outbound rule in Sophos: ", err)
-		}
-
-		err = unassignIPfromVM(vCenterId)
-		if err != nil {
-			log.Println("Error unassigning IP from VM: ", err)
 		}
 	}
 
