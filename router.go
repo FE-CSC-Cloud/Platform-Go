@@ -91,5 +91,5 @@ func main() {
 	tickets.PATCH("/:id", UpdateTicket)
 	tickets.DELETE("/:id", DeleteTicket)
 
-	e.Logger.Fatal(e.Start(":" + getEnvVar("APP_PORT")))
+	e.Start(":" + getEnvVar("APP_PORT"))
 }

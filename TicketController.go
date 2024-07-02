@@ -16,8 +16,10 @@ func GetTickets(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, "Failed to connect to database")
 	}
 
-	baseQuery := "SELECT tickets.id, title, message, creator_name, status, tickets.created_at, vm.vcenter_id, vm.name, vm.operating_system, vm.end_date, vm.storage, vm.memory, vm.ip FROM tickets JOIN virtual_machines vm on tickets.server_id = vm.id"
-
+	baseQuery := `SELECT tickets.id, title, message, creator_name, status, tickets.created_at, 
+COALESCE(vm.vcenter_id, ''), COALESCE(vm.name, ''), COALESCE(vm.operating_system, ''), 
+COALESCE(vm.end_date, ''), COALESCE(vm.storage, 0), COALESCE(vm.memory, 0), COALESCE(vm.ip, '') 
+FROM tickets LEFT JOIN virtual_machines vm on tickets.server_id = vm.id`
 	var query string
 	var args []interface{}
 	if id != "" {
