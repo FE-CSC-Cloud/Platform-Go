@@ -116,7 +116,7 @@ func CreateTicket(c echo.Context) error {
 		// parse the server id to string
 		stringServerId := strconv.Itoa(*body.ServerId)
 
-		if !checkIfServerBelongsToUser(UserId, stringServerId, db) && !isAdmin {
+		if !checkIfServerBelongsToUser(UserId, stringServerId, db) || !isAdmin {
 			return c.JSON(http.StatusNotFound, "You are not allowed to access this server")
 		}
 
