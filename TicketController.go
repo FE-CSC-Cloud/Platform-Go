@@ -117,7 +117,7 @@ func CreateTicket(c echo.Context) error {
 		stringServerId := strconv.Itoa(*body.ServerId)
 
 		if !checkIfServerBelongsToUser(UserId, stringServerId, db) && !isAdmin {
-			return c.JSON(http.StatusUnauthorized, "You are not allowed to access this server")
+			return c.JSON(http.StatusNotFound, "You are not allowed to access this server")
 		}
 
 		_, err = db.Exec("INSERT INTO tickets (title, message, user_id, creator_name, status, server_id) VALUES (?, ?, ?, ?, 'Pending', ?)", body.Title, body.Message, UserId, fullName, *body.ServerId)
