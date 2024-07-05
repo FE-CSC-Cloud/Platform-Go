@@ -115,26 +115,38 @@ func CreateDnsRecord(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, "could not fetch records from database")
 	}
 
-	if rows.Next() {
-		parentSubdomain, err := getParentSubdomainFromDomainRows(rows)
+	var parentSubdomains []string
+	var subdomains []string
+
+	for rows.Next() {
+		var (
+			VM                                         int
+			parent, subdomain, recordType, recordValue string
+		)
+		err = rows.Scan(&VM, &parent, &subdomain, &recordType, &recordValue)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, "could not fetch records from database")
+			log.Println("Error scanning rows: ", err)
+			return c.JSON(http.StatusInternalServerError, "could not scan rows")
 		}
 
+		subdomains = append(subdomains, subdomain)
+	}
+
+	if len(subdomains) > 0 {
 		// check how many records are in the zone
 		records, err := getRecordsInTechnitium(request.Parent, "", true)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, "could not fetch records in zone")
 		}
 
-		for i := 0; i < len(records); i += 2 { /*
-				log.Println("records[i]: ", records[i])
-				log.Println("parentSubdomain: ", parentSubdomain)*/
-			// check if the record is a subdomain of the parent
-			if !strings.Contains(records[i], parentSubdomain) {
-				return c.JSON(http.StatusBadRequest, "You can't have multiple subdomains for a server")
+		for _, subdomain := range subdomains {
+			if !strings.Contains(subdomain, ".") {
+				parentSubdomains = append(parentSubdomains, subdomain)
 			}
 		}
+
+		log.Println("records: ", records)
+		log.Println("parentSubdomains: ", parentSubdomains)
 	}
 
 	errDNS := createRecordInDNS(request.Parent, request.Subdomain, request.Ttl, request.Type, request.RecordValue)
@@ -142,10 +154,10 @@ func CreateDnsRecord(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, errDNS)
 	}
 
-	/*err = createRecordForSubInDB(request.Parent, request.Subdomain, serverId, request.Type, request.RecordValue)
-	  if err != nil {
-	  	return c.JSON(http.StatusInternalServerError, "could not create record in database")
-	  }*/
+	err = createRecordForSubInDB(request.Parent, request.Subdomain, serverId, request.Type, request.RecordValue)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, "could not create record in database")
+	}
 
 	return c.JSON(http.StatusOK, "record created")
 }
@@ -416,28 +428,4 @@ func getRecordsInTechnitium(zone, subDomain string, listZone bool) ([]string, er
 	}
 
 	return records, nil
-}
-
-func getParentSubdomainFromDomainRows(rows *sql.Rows) (string, error) {
-	var subdomain string
-	// get the length of rows
-	rowsCount := 0
-
-	for rows.Next() {
-		rowsCount++
-		var (
-			parent, sub string
-		)
-		err := rows.Scan(&parent, &sub)
-		if err != nil {
-			return "", err
-		}
-		log.Println("sub: ", sub, "parent: ", parent)
-		if strings.Count(sub, ".") < strings.Count(subdomain, ".") {
-			subdomain = sub
-		}
-	}
-
-	log.Println("rowsCount: ", rowsCount)
-	return subdomain, nil
 }
