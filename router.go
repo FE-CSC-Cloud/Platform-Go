@@ -32,8 +32,9 @@ func main() {
 	d.Use(checkIfLoggedIn)
 
 	d.GET("", GetDnsZones)
-	d.GET("/server/:serverId", GetDnsRecordsForServer)
+	d.GET("/:serverId", GetDnsRecordsForServer)
 	d.POST("/:serverId", CreateDnsRecord)
+	d.PATCH("/:recordId", UpdateDnsRecord)
 	d.DELETE("/:serverId", DeleteDnsRecord)
 
 	// TODO: array met template IDs cachen (fetchTemplateLibraryIdsFromVCenter)

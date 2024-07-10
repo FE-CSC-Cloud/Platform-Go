@@ -7,9 +7,18 @@ import (
 	"github.com/labstack/echo/v4"
 	"log"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 )
+
+type RequestBodyServerCreation struct {
+	Subdomain   string `json:"subdomain"`
+	Parent      string `json:"parent"`
+	RecordValue string `json:"record_value"`
+	Ttl         string `json:"ttl"`
+	Type        string `json:"type"`
+}
 
 type Zone struct {
 	Name            string   `json:"name"`
@@ -76,33 +85,73 @@ func GetDnsZones(c echo.Context) error {
 	}
 
 	// remove internal zones
-	var zones []Zone
+	var zones []string
 	for _, zone := range dnsResponse.Response.Zones {
 		if !zone.Internal {
-			zones = append(zones, zone)
+			zones = append(zones, zone.Name)
 		}
 	}
 
-	dnsResponse.Response.Zones = zones
-
-	return c.JSON(200, dnsResponse)
+	return c.JSON(200, zones)
 }
-func CreateDnsRecord(c echo.Context) error {
-	type RequestBody struct {
-		Subdomain   string `json:"subdomain"`
-		Parent      string `json:"parent"`
-		RecordValue string `json:"record_value"`
-		Ttl         string `json:"ttl"`
-		Type        string `json:"type"`
-	}
-
+func GetDnsRecordsForServer(c echo.Context) error {
 	serverId := c.Param("serverId")
 
-	request := new(RequestBody)
+	if !userIsAllowedToaccessServer(serverId, c) {
+		return c.JSON(http.StatusNotFound, "Server not found")
+	}
+
+	db, err := connectToDB()
+	if err != nil {
+		log.Println("Error connecting to database: ", err)
+		return c.JSON(http.StatusInternalServerError, "could not connect to database")
+	}
+
+	rows, err := getRecordsForServerFromDB(db, serverId)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, "could not fetch records from database")
+	}
+
+	var records []map[string]string
+	for rows.Next() {
+		record := make(map[string]string)
+		var (
+			Id, VM                                     int
+			parent, subdomain, recordType, recordValue string
+		)
+		err = rows.Scan(&Id, &VM, &parent, &subdomain, &recordType, &recordValue)
+		if err != nil {
+			log.Println("Error scanning rows: ", err)
+			return c.JSON(http.StatusInternalServerError, "could not scan rows")
+		}
+
+		record["id"] = strconv.Itoa(Id)
+		record["parent"] = parent
+		record["subdomain"] = subdomain
+		record["record_type"] = recordType
+		record["record_value"] = recordValue
+		records = append(records, record)
+	}
+
+	if len(records) == 0 {
+		return c.JSON(http.StatusOK, "no records found")
+	}
+
+	return c.JSON(http.StatusOK, records)
+}
+
+func CreateDnsRecord(c echo.Context) error {
+	serverId := c.Param("serverId")
+	request := new(RequestBodyServerCreation)
 	if err := c.Bind(request); err != nil {
 		log.Println("Error binding request: ", err)
 		return c.JSON(http.StatusBadRequest, "could not bind request")
 	}
+
+	// strip any training dots
+	request.Subdomain = strings.TrimSuffix(request.Subdomain, ".")
+
+	subdomainWithPrefix := strings.ToLower(request.Subdomain) + "." + getEnvVar("DOMAIN_PREFIX")
 
 	if !userIsAllowedToaccessServer(serverId, c) {
 		return c.JSON(http.StatusNotFound, "Server not found")
@@ -110,56 +159,106 @@ func CreateDnsRecord(c echo.Context) error {
 
 	db, err := connectToDB()
 
-	rows, err := getRecordsForServerFromDB(db, serverId)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "could not fetch records from database")
+	topLevelSubdomain := getTopLevelSubDomain(subdomainWithPrefix)
+
+	log.Println("Top level subdomain: ", topLevelSubdomain)
+
+	// Step 1: Extract the top-level subdomain and direct parent domain
+	subdomainParts := strings.Split(subdomainWithPrefix, ".")
+	if len(subdomainParts) > 2 {
+		topLevelSubdomain = strings.Join(subdomainParts[len(subdomainParts)-2:], ".")
+	} else {
+		topLevelSubdomain = subdomainParts[0]
 	}
 
-	var parentSubdomains []string
-	var subdomains []string
+	log.Println("Top level subdomain: ", topLevelSubdomain)
 
-	for rows.Next() {
-		var (
-			VM                                         int
-			parent, subdomain, recordType, recordValue string
-		)
-		err = rows.Scan(&VM, &parent, &subdomain, &recordType, &recordValue)
-		if err != nil {
-			log.Println("Error scanning rows: ", err)
-			return c.JSON(http.StatusInternalServerError, "could not scan rows")
-		}
-
-		subdomains = append(subdomains, subdomain)
+	// Step 2: Query the database for the top-level subdomain or direct parent domain ownership
+	domainOwnershipExists := userOwnsParentDomain(request.Parent, topLevelSubdomain, db)
+	// Step 3: Proceed only if the top-level subdomain exists
+	if !domainOwnershipExists {
+		return c.JSON(http.StatusBadRequest, "you must own the top-level subdomain to create sub-subdomains")
 	}
 
-	if len(subdomains) > 0 {
-		// check how many records are in the zone
-		records, err := getRecordsInTechnitium(request.Parent, "", true)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, "could not fetch records in zone")
-		}
-
-		for _, subdomain := range subdomains {
-			if !strings.Contains(subdomain, ".") {
-				parentSubdomains = append(parentSubdomains, subdomain)
-			}
-		}
-
-		log.Println("records: ", records)
-		log.Println("parentSubdomains: ", parentSubdomains)
+	if checkIfUserAlreadyHasRecordInDB(db, request.Parent, subdomainWithPrefix, request.Type, request.RecordValue) {
+		return c.JSON(http.StatusBadRequest, "record already exists")
 	}
 
-	errDNS := createRecordInDNS(request.Parent, request.Subdomain, request.Ttl, request.Type, request.RecordValue)
-	if errDNS != "" {
+	userIsAllowedToMakeDomain, err := checkIfUserDoesNotHaveMoreThen2SubSubdomains(db, serverId, subdomainWithPrefix)
+	if !userIsAllowedToMakeDomain {
+		return c.JSON(http.StatusBadRequest, "you are not allowed to create a subsubdomain, you already have 1 subsubdomain")
+	}
+
+	errDNS := createRecordInDNS(request.Parent, subdomainWithPrefix, request.Ttl, request.Type, request.RecordValue)
+	if errDNS != nil {
 		return c.JSON(http.StatusInternalServerError, errDNS)
 	}
 
-	err = createRecordForSubInDB(request.Parent, request.Subdomain, serverId, request.Type, request.RecordValue)
+	err = createRecordForSubInDB(request.Parent, subdomainWithPrefix, serverId, request.Type, request.RecordValue)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, "could not create record in database")
 	}
 
 	return c.JSON(http.StatusOK, "record created")
+}
+
+func UpdateDnsRecord(c echo.Context) error {
+	recordId := c.Param("recordId")
+	request := new(RequestBodyServerCreation)
+	if err := c.Bind(request); err != nil {
+		log.Println("Error binding request: ", err)
+		return c.JSON(http.StatusBadRequest, "could not bind request")
+	}
+
+	// get record from database
+	db, err := connectToDB()
+	if err != nil {
+		log.Println("Error connecting to database: ", err)
+		return c.JSON(http.StatusInternalServerError, "could not connect to database")
+	}
+
+	var (
+		VM                                         int
+		parent, subdomain, recordType, recordValue string
+	)
+
+	err = db.QueryRow("SELECT virtual_machines_id, parent_domain, subDomain, record_type, record_value FROM sub_domains WHERE id = ?", recordId).Scan(&VM, &parent, &subdomain, &recordType, &recordValue)
+	if err != nil {
+		log.Println("Error fetching record from database: ", err)
+		return c.JSON(http.StatusInternalServerError, "could not fetch record from database")
+	}
+
+	if !userIsAllowedToaccessServer(strconv.Itoa(VM), c) {
+		return c.JSON(http.StatusNotFound, "Server not found")
+	}
+
+	if !checkIfUserAlreadyHasRecordInDB(db, parent, subdomain, recordType, recordValue) {
+		return c.JSON(http.StatusBadRequest, "record does not exist")
+	}
+
+	err = deleteRecordInDB(request.Parent, request.Subdomain, request.Type, request.RecordValue)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, "could not delete record in database")
+	}
+
+	_, err = deleteRecordInDNS(request.Parent, request.Subdomain, request.Type, request.RecordValue)
+	if err != nil {
+		log.Println("Error deleting record in DNS: ", err)
+		return c.JSON(http.StatusInternalServerError, "could not delete record in DNS")
+	}
+
+	err = createRecordInDNS(request.Parent, request.Subdomain, request.Ttl, request.Type, request.RecordValue)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, err)
+	}
+
+	/*err = createRecordForSubInDB(request.Parent, request.Subdomain, serverId, request.Type, request.RecordValue)
+	  if err != nil {
+	  	return c.JSON(http.StatusInternalServerError, "could not create record in database")
+	  }*/
+
+	return c.JSON(http.StatusOK, "record updated")
+
 }
 
 func DeleteDnsRecord(c echo.Context) error {
@@ -196,51 +295,6 @@ func DeleteDnsRecord(c echo.Context) error {
 	return c.JSON(200, "record deleted")
 }
 
-func GetDnsRecordsForServer(c echo.Context) error {
-	serverId := c.Param("serverId")
-
-	if !userIsAllowedToaccessServer(serverId, c) {
-		return c.JSON(http.StatusNotFound, "Server not found")
-	}
-
-	db, err := connectToDB()
-	if err != nil {
-		log.Println("Error connecting to database: ", err)
-		return c.JSON(http.StatusInternalServerError, "could not connect to database")
-	}
-
-	rows, err := getRecordsForServerFromDB(db, serverId)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "could not fetch records from database")
-	}
-
-	var records []map[string]string
-	for rows.Next() {
-		record := make(map[string]string)
-		var (
-			VM                                         int
-			parent, subdomain, recordType, recordValue string
-		)
-		err = rows.Scan(&VM, &parent, &subdomain, &recordType, &recordValue)
-		if err != nil {
-			log.Println("Error scanning rows: ", err)
-			return c.JSON(http.StatusInternalServerError, "could not scan rows")
-		}
-
-		record["parent"] = parent
-		record["subdomain"] = subdomain
-		record["record_type"] = recordType
-		record["record_value"] = recordValue
-		records = append(records, record)
-	}
-
-	if len(records) == 0 {
-		return c.JSON(http.StatusOK, "no records found")
-	}
-
-	return c.JSON(http.StatusOK, records)
-}
-
 func createRecordForSubInDB(parent, subdomain, VM, recordType, recordValue string) error {
 	db, err := connectToDB()
 	if err != nil {
@@ -257,7 +311,7 @@ func createRecordForSubInDB(parent, subdomain, VM, recordType, recordValue strin
 }
 
 func getRecordsForServerFromDB(db *sql.DB, serverId string) (*sql.Rows, error) {
-	rows, err := db.Query("SELECT virtual_machines_id, parent_domain, subdomain, record_type, record_value FROM sub_domains WHERE virtual_machines_id = ?", serverId)
+	rows, err := db.Query("SELECT id ,virtual_machines_id, parent_domain, subdomain, record_type, record_value FROM sub_domains WHERE virtual_machines_id = ?", serverId)
 	if err != nil {
 		log.Println("Error fetching records from database: ", err)
 		return nil, err
@@ -266,7 +320,7 @@ func getRecordsForServerFromDB(db *sql.DB, serverId string) (*sql.Rows, error) {
 	return rows, nil
 }
 
-func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) string {
+func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) error {
 	queries := [][]string{
 		{"zone", zone},
 		{"domain", domain + "." + zone},
@@ -280,16 +334,16 @@ func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) string
 	_, err = authenticatedDNSRequest("zones/records/add", toQueries)
 	if err != nil {
 		log.Println("Error creating record in DNS: ", err)
-		return "internal server error"
+		return fmt.Errorf("internal server error")
 	}
 
-	return ""
+	return nil
 }
 
 func deleteRecordInDNS(zone, domain, recordType, recordValue string) (string, error) {
 	queries := [][]string{
 		{"zone", zone},
-		{"domain", domain + "." + zone},
+		{"domain", domain + zone},
 		{"type", recordType},
 	}
 
@@ -428,4 +482,91 @@ func getRecordsInTechnitium(zone, subDomain string, listZone bool) ([]string, er
 	}
 
 	return records, nil
+}
+
+func checkIfUserAlreadyHasRecordInDB(db *sql.DB, parent, subdomain, recordType, recordValue string) bool {
+	rows, err := db.Query("SELECT * FROM sub_domains WHERE parent_domain = ? AND subDomain = ? AND record_type = ? AND record_value = ?", parent, subdomain, recordType, recordValue)
+	if err != nil {
+		log.Println("Error checking if user already has record in database: ", err)
+		return false
+	}
+
+	if rows.Next() {
+		return true
+	}
+
+	return false
+}
+
+func checkIfUserDoesNotHaveMoreThen2SubSubdomains(db *sql.DB, serverId, subdomainWithPrefix string) (bool, error) {
+	rows, err := getRecordsForServerFromDB(db, serverId)
+	if err != nil {
+		return false, err
+	}
+
+	var parentSubdomains []string
+	var subdomains []string
+
+	for rows.Next() {
+		var (
+			Id, VM                                     int
+			parent, subdomain, recordType, recordValue string
+		)
+		err = rows.Scan(&Id, &VM, &parent, &subdomain, &recordType, &recordValue)
+		if err != nil {
+			log.Println("Error scanning rows: ", err)
+			return false, err
+		}
+
+		subdomains = append(subdomains, subdomain)
+	}
+
+	if len(subdomains) > 0 {
+		for _, subdomain := range subdomains {
+			// check if the domain had > 1 . in it so we know it's a subsubdomain
+			if strings.Count(subdomain, ".") == 1 {
+				parentSubdomains = append(parentSubdomains, subdomain)
+			}
+		}
+
+		// explode the subdomainWithPrefix at the dots
+		explodedSubdomain := strings.Split(subdomainWithPrefix, ".")
+
+		if len(explodedSubdomain) > 2 {
+			// get the last 2 elements of the exploded subdomain
+			lastTwoElements := explodedSubdomain[len(explodedSubdomain)-2] + "." + explodedSubdomain[len(explodedSubdomain)-1]
+
+			if !slices.Contains(parentSubdomains, lastTwoElements) {
+				return false, nil
+			}
+		}
+	}
+
+	return true, nil
+}
+
+func getTopLevelSubDomain(subdomain string) string {
+	subdomainParts := strings.Split(subdomain, ".")
+	if len(subdomainParts) > 2 {
+		return strings.Join(subdomainParts[len(subdomainParts)-2:], ".")
+	} else {
+		return subdomainParts[0]
+	}
+}
+
+func userOwnsParentDomain(parent, subdomain string, db *sql.DB) bool {
+	var domainOwnershipExists bool
+	err := db.QueryRow(`
+    SELECT EXISTS(
+        SELECT 1 
+        FROM sub_domains 
+        WHERE parent_domain = ? 
+        AND (subDomain = ? OR subDomain = ?) 
+    )`, parent, subdomain, subdomain+"."+getEnvVar("DOMAIN_PREFIX")).Scan(&domainOwnershipExists)
+	if err != nil {
+		log.Println("Error checking for domain ownership: ", err)
+		return false
+	}
+
+	return domainOwnershipExists
 }

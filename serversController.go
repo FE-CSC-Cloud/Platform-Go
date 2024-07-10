@@ -604,7 +604,9 @@ func handleFailedCreation(serverName, userId, studentId, vCenterId, serverCreati
 
 	createNotificationForUser(db, userId, userErrorTitle, userErrorBody)
 	_, _, _, studentEmail, _ := fetchUserInfoWithSID(userId)
-	sendEmailNotification(studentEmail, userErrorTitle, userErrorBody)
+	if studentEmail != "" {
+		sendEmailNotification(studentEmail, userErrorTitle, userErrorBody)
+	}
 }
 
 func deleteServerFromDB(serverName, userId string, db *sql.DB) {
