@@ -253,7 +253,7 @@ func DeleteDnsRecord(c echo.Context) error {
 
 	err := deleteRecordInDB(request.Parent, request.Subdomain, request.RecordType, request.RecordValue)
 	if err != nil {
-		return err
+		return c.JSON(http.StatusInternalServerError, "could not delete record in database")
 	}
 
 	_, err = deleteRecordInDNS(request.Parent, request.Subdomain, request.RecordType, request.RecordValue)
