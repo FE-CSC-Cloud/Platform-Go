@@ -172,6 +172,7 @@ func CreateDnsRecord(c echo.Context) error {
 }
 
 func UpdateDnsRecord(c echo.Context) error {
+	// TODO: ACTUALLY UPDATE THE RECORD IN THE DATABASE
 	recordId := c.Param("recordId")
 	request := new(RequestBodyServerCreation)
 	if err := c.Bind(request); err != nil {
@@ -221,10 +222,10 @@ func UpdateDnsRecord(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, err)
 	}
 
-	/*err = createRecordForSubInDB(request.Parent, request.Subdomain, serverId, request.Type, request.RecordValue)
-	  if err != nil {
-	  	return c.JSON(http.StatusInternalServerError, "could not create record in database")
-	  }*/
+	err = createRecordForSubInDB(request.Parent, request.Subdomain, serverId, request.Type, request.RecordValue)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, "could not create record in database")
+	}
 
 	return c.JSON(http.StatusOK, "record updated")
 
