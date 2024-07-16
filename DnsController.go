@@ -222,7 +222,7 @@ func UpdateDnsRecord(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, err)
 	}
 
-	err = createRecordForSubInDB(request.Parent, request.Subdomain, serverId, request.Type, request.RecordValue)
+	err = createRecordForSubInDB(request.Parent, request.Subdomain, strconv.Itoa(VM), request.Type, request.RecordValue)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, "could not create record in database")
 	}
