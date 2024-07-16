@@ -26,6 +26,9 @@ func connectAndBind(username string, password string) (*ldap.Conn, error) {
 func fetchUserInfoWithSID(sid string) (string, string, string, string, error) {
 	// Connect to LDAP
 	ldapConn, err := connectAndBind(getEnvVar("LDAP_READ_USER"), getEnvVar("LDAP_READ_PASS"))
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("failed to connect to LDAP server: %v", err)
+	}
 
 	// Search for the user with the given SID
 	searchRequest := ldap.NewSearchRequest(

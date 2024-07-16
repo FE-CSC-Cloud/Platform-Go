@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -58,6 +59,8 @@ type serverCreationJsonBody struct {
 	Storage         int       `json:"storage"`
 	Memory          int       `json:"memory"`
 	HomeIPs         *[]string `json:"home_ips"`
+	SubDomain       *string   `json:"sub_domain"`
+	DomainZone      *string   `json:"domain_zone"`
 }
 
 type startScript struct {
@@ -191,6 +194,17 @@ func DeleteServer(c echo.Context) error {
 		log.Println("Error executing statement: ", err)
 		return c.JSON(http.StatusBadRequest, "Error deleting server from database")
 	}
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, "Error converting ID to int")
+	}
+
+	// delete all the DNS records for the server
+	err = deleteDNSRecordsForServer(idInt, db)
+	if err != nil {
+		log.Println("Error deleting DNS records for server: ", err)
+		return c.JSON(http.StatusBadRequest, "Error deleting DNS records for server")
+	}
 
 	err = unassignIPfromVM(vCenterID)
 	if err != nil {
@@ -296,6 +310,19 @@ func CreateServer(c echo.Context) error {
 	session := getVCenterSession()
 	serverCreationStep := ""
 
+	if jsonBody.SubDomain != nil && jsonBody.DomainZone != nil {
+		// parse the subdomain and domain zone to regular strings
+		zone := *jsonBody.DomainZone
+		subdomain := *jsonBody.SubDomain + "." + getEnvVar("SUBDOMAIN_PREFIX")
+
+		// strip any dots from the subdomain to make sure it's a parent
+		subdomain = strings.TrimSuffix(subdomain, ".")
+
+		if subDomainInUse(zone, subdomain, db) {
+			return c.JSON(http.StatusBadRequest, "This subdomain is already in use!")
+		}
+	}
+
 	valid, errMessage, endDate := validateServerCreation(jsonBody, session)
 	if !valid {
 		return c.JSON(http.StatusBadRequest, errMessage)
@@ -393,8 +420,28 @@ func CreateServer(c echo.Context) error {
 			log.Println("Error fetching user info: ", err)
 		}
 
+		if jsonBody.SubDomain != nil && jsonBody.DomainZone != nil {
+			// convert the subdomain and domain zone to regular strings
+			zone := *jsonBody.DomainZone
+			subdomain := *jsonBody.SubDomain + "." + getEnvVar("SUBDOMAIN_PREFIX")
+
+			// strip any dots from the subdomain to make sure it's a parent
+			subdomain = strings.TrimSuffix(subdomain, ".")
+
+			// get the id of the server we just created
+			var serverID string
+			err = db.QueryRow("SELECT id FROM virtual_machines WHERE name = ? AND users_id = ? and vcenter_id = ?", jsonBody.Name, UserId, vCenterID).Scan(&serverID)
+			if err != nil {
+				log.Println("Error getting server ID: ", err)
+				handleFailedCreation(jsonBody.Name, UserId, studentID, vCenterID, serverCreationStep, ip, db)
+			}
+
+			// create the DNS record
+			err = createDNSRecord(db, subdomain, zone, ip, strconv.Itoa(3306), "A", serverID)
+		}
+
 		serverCreationSuccessTitle := "Server is gemaakt"
-		serverCreationSuccessBody := "Je server(" + jsonBody.Name + ") is gemaakt met het ip: " + ip + " je gebruikersnaam is: " + firstName + " en je wachtwoord is: " + firstName + " verander dit aub zo snel mogelijk!"
+		serverCreationSuccessBody := "Je server(" + jsonBody.Name + ") is gemaakt met het ip: " + ip + " je gebruikersnaam is: " + firstName + " en je wachtwoord is: " + firstName + " verander dit aub zo snel mogelijk! Als je een subdomein hebt aangevraagd dan is deze ook aangemaakt kan je deze nu ook gebruiken."
 		// check if the email is not empty
 		createNotificationForUser(db, UserId, serverCreationSuccessTitle, serverCreationSuccessBody)
 		if studentEmail != "" {

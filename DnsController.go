@@ -148,7 +148,7 @@ func CreateDnsRecord(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "could not bind request")
 	}
 
-	// strip any training dots
+	// strip any training dots of the subdomain
 	request.Subdomain = strings.TrimSuffix(request.Subdomain, ".")
 
 	subdomainWithPrefix := strings.ToLower(request.Subdomain) + "." + getEnvVar("DOMAIN_PREFIX")
@@ -158,45 +158,14 @@ func CreateDnsRecord(c echo.Context) error {
 	}
 
 	db, err := connectToDB()
-
-	topLevelSubdomain := getTopLevelSubDomain(subdomainWithPrefix)
-
-	log.Println("Top level subdomain: ", topLevelSubdomain)
-
-	// Step 1: Extract the top-level subdomain and direct parent domain
-	subdomainParts := strings.Split(subdomainWithPrefix, ".")
-	if len(subdomainParts) > 2 {
-		topLevelSubdomain = strings.Join(subdomainParts[len(subdomainParts)-2:], ".")
-	} else {
-		topLevelSubdomain = subdomainParts[0]
-	}
-
-	log.Println("Top level subdomain: ", topLevelSubdomain)
-
-	// Step 2: Query the database for the top-level subdomain or direct parent domain ownership
-	domainOwnershipExists := userOwnsParentDomain(request.Parent, topLevelSubdomain, db)
-	// Step 3: Proceed only if the top-level subdomain exists
-	if !domainOwnershipExists {
-		return c.JSON(http.StatusBadRequest, "you must own the top-level subdomain to create sub-subdomains")
-	}
-
-	if checkIfUserAlreadyHasRecordInDB(db, request.Parent, subdomainWithPrefix, request.Type, request.RecordValue) {
-		return c.JSON(http.StatusBadRequest, "record already exists")
-	}
-
-	userIsAllowedToMakeDomain, err := checkIfUserDoesNotHaveMoreThen2SubSubdomains(db, serverId, subdomainWithPrefix)
-	if !userIsAllowedToMakeDomain {
-		return c.JSON(http.StatusBadRequest, "you are not allowed to create a subsubdomain, you already have 1 subsubdomain")
-	}
-
-	errDNS := createRecordInDNS(request.Parent, subdomainWithPrefix, request.Ttl, request.Type, request.RecordValue)
-	if errDNS != nil {
-		return c.JSON(http.StatusInternalServerError, errDNS)
-	}
-
-	err = createRecordForSubInDB(request.Parent, subdomainWithPrefix, serverId, request.Type, request.RecordValue)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "could not create record in database")
+		log.Println("Error connecting to database: ", err)
+		return c.JSON(http.StatusInternalServerError, "could not connect to database")
+	}
+
+	err = createDNSRecord(db, subdomainWithPrefix, request.Parent, request.RecordValue, request.Ttl, request.Type, serverId)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, err.Error())
 	}
 
 	return c.JSON(http.StatusOK, "record created")
@@ -293,6 +262,57 @@ func DeleteDnsRecord(c echo.Context) error {
 	}
 
 	return c.JSON(200, "record deleted")
+}
+
+func createDNSRecord(db *sql.DB, subdomain, zone, value, ttl, recordType, serverId string) error {
+	userIsAllowed, err := userIsAllowedToMakeNewDNSRecord(db, serverId, subdomain, zone, recordType, value)
+	if !userIsAllowed {
+		return err
+	}
+
+	errDNS := createRecordInDNS(zone, subdomain, ttl, recordType, value)
+	if errDNS != nil {
+		return errDNS
+	}
+
+	err = createRecordForSubInDB(zone, subdomain, serverId, recordType, value)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func userIsAllowedToMakeNewDNSRecord(db *sql.DB, serverId, subdomain, zone, recordType, value string) (bool, error) {
+	topLevelSubdomain := getTopLevelSubDomain(subdomain)
+
+	subdomainParts := strings.Split(subdomain, ".")
+	if len(subdomainParts) > 2 {
+		topLevelSubdomain = strings.Join(subdomainParts[len(subdomainParts)-2:], ".")
+	} else {
+		topLevelSubdomain = subdomainParts[0]
+	}
+
+	domainInUse := subDomainInUse(zone, topLevelSubdomain, db)
+	if domainInUse {
+		if !userOwnsDomain(zone, topLevelSubdomain, serverId, db) {
+			return false, fmt.Errorf("domain is already in use and you do not own it")
+		}
+	}
+
+	if checkIfUserAlreadyHasRecordInDB(db, zone, subdomain, recordType, value) {
+		return false, fmt.Errorf("record already exists")
+	}
+
+	userIsAllowedToMakeDomain, err := checkIfUserDoesNotHaveMoreThen2SubSubdomains(db, serverId, subdomain)
+	if err != nil {
+		return false, err
+	}
+	if !userIsAllowedToMakeDomain {
+		return false, fmt.Errorf("you are not allowed to create more than 2 sub-subdomains")
+	}
+
+	return true, nil
 }
 
 func createRecordForSubInDB(parent, subdomain, VM, recordType, recordValue string) error {
@@ -554,19 +574,64 @@ func getTopLevelSubDomain(subdomain string) string {
 	}
 }
 
-func userOwnsParentDomain(parent, subdomain string, db *sql.DB) bool {
+func subDomainInUse(parent, subdomain string, db *sql.DB) bool {
+	rows, err := db.Query(`SELECT id FROM sub_domains where parent_domain = ? AND subDomain = ?`, parent, subdomain)
+	if rows.Next() {
+		return true
+	}
+	if err != nil {
+		log.Println("Error checking for domain ownership: ", err)
+		return true
+	}
+
+	return false
+}
+
+func userOwnsDomain(parent, subdomain, serverId string, db *sql.DB) bool {
 	var domainOwnershipExists bool
-	err := db.QueryRow(`
+
+	serverIdInt, err := strconv.Atoi(serverId)
+
+	err = db.QueryRow(`
     SELECT EXISTS(
         SELECT 1 
-        FROM sub_domains 
+        FROM sub_domains
         WHERE parent_domain = ? 
         AND (subDomain = ? OR subDomain = ?) 
-    )`, parent, subdomain, subdomain+"."+getEnvVar("DOMAIN_PREFIX")).Scan(&domainOwnershipExists)
+        AND virtual_machines_id = ?
+    )`, parent, subdomain, subdomain+"."+getEnvVar("DOMAIN_PREFIX"), serverIdInt).Scan(&domainOwnershipExists)
 	if err != nil {
 		log.Println("Error checking for domain ownership: ", err)
 		return false
 	}
 
 	return domainOwnershipExists
+}
+
+func deleteDNSRecordsForServer(serverID int, db *sql.DB) error {
+	rows, err := db.Query("SELECT parent_domain, subDomain, record_type, record_value FROM sub_domains WHERE virtual_machines_id = ?", serverID)
+	if err != nil {
+		log.Println("Error fetching records from database: ", err)
+		return err
+	}
+
+	for rows.Next() {
+		var (
+			parent, subdomain, recordType, recordValue string
+		)
+		err = rows.Scan(&parent, &subdomain, &recordType, &recordValue)
+
+		err := deleteRecordInDB(parent, subdomain, recordType, recordValue)
+		if err != nil {
+			return err
+		}
+
+		_, err = deleteRecordInDNS(parent, subdomain, recordType, recordValue)
+		if err != nil {
+			log.Println("Error deleting record in DNS: ", err)
+			return err
+		}
+	}
+
+	return nil
 }
