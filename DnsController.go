@@ -351,6 +351,9 @@ func createRecordInDNS(zone, domain, ttl, recordType, recordValue string) error 
 	}
 
 	toQueries, err := appendRecordValueWithCorrectTypeToQueries(queries, recordType, recordValue)
+	if err != nil {
+		return err
+	}
 
 	_, err = authenticatedDNSRequest("zones/records/add", toQueries)
 	if err != nil {
