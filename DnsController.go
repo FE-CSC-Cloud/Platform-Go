@@ -271,14 +271,14 @@ func createDNSRecord(db *sql.DB, subdomain, zone, value, ttl, recordType, server
 		return err
 	}
 
+	err = createRecordForSubInDB(zone, subdomain, serverId, recordType, value)
+	if err != nil {
+		return fmt.Errorf("could not create record in database")
+	}
+
 	errDNS := createRecordInDNS(zone, subdomain, ttl, recordType, value)
 	if errDNS != nil {
 		return errDNS
-	}
-
-	err = createRecordForSubInDB(zone, subdomain, serverId, recordType, value)
-	if err != nil {
-		return err
 	}
 
 	return nil
