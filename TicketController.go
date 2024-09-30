@@ -94,7 +94,7 @@ func CreateTicket(c echo.Context) error {
 	type createTicketBody struct {
 		Title    string `json:"title"`
 		Message  string `json:"message"`
-		ServerId *int   `json:"server_id"`
+		ServerId *int   `json:"serverId"`
 	}
 
 	var body createTicketBody
