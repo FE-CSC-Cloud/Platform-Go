@@ -330,7 +330,10 @@ func CreateServer(c echo.Context) error {
 
 	UserId, isAdmin, fullName, studentID := getUserAssociatedWithJWT(c)
 
-	if countServersByUser(UserId, db) >= 2 && !isAdmin {
+	globalLimit := getEnvVar("GLOBAL_SERVER_LIMIT")
+	intGlobalLimit, _ := strconv.Atoi(globalLimit)
+
+	if countServersByUser(UserId, db) >= intGlobalLimit && !isAdmin {
 		return c.JSON(http.StatusBadRequest, "You already have 2 servers, you can't create more")
 	}
 
