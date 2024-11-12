@@ -51,6 +51,11 @@ func sendEmailNotification(to, title, message string) {
 	port := getEnvVar("EMAIL_PORT")
 	security := getEnvVar("SECURITY_EMAIL")
 
+	if from == "" || username == "" || password == "" || host == "" || port == "" || security == "" {
+		log.Println("Email configuration is not set up correctly")
+		return
+	}
+
 	// Authenticate to the SMTP server
 	auth := smtp.PlainAuth("", username, password, host)
 

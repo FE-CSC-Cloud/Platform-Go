@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/labstack/echo/v4"
 	"io"
 	"log"
@@ -39,37 +40,47 @@ func updateDataStoreID(session string) string {
 	client := createVCenterHTTPClient()
 	baseURL := getEnvVar("VCENTER_URL")
 
-	// https://172.16.1.80/api/vcenter/datastore?names=datastore1
 	req, err := http.NewRequest("GET", baseURL+"/api/vcenter/datastore?names="+getEnvVar("VCENTER_DATASTORE_NAME"), nil)
 	if err != nil {
 		log.Println("Error creating request: ", err)
+		return ""
 	}
 
-	// Add the session ID to the request header
 	req.Header.Add("vmware-api-session-id", session)
 
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Println("Error sending request: ", err)
+		return ""
 	}
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Println("Error reading response: ", err)
+		return ""
 	}
-	defer resp.Body.Close()
+
+	fmt.Println("Response: ", string(body))
 
 	if resp.StatusCode != 200 {
 		log.Println("Error getting data store ID: ", resp)
+		return ""
 	}
 
 	var dataStores []DataStore
-
 	err = json.Unmarshal(body, &dataStores)
+	if err != nil {
+		log.Println("Error unmarshalling response: ", err)
+		return ""
+	}
 
-	// set the data store ID to redis so we don't have to fetch it every time
+	if len(dataStores) == 0 {
+		log.Println("No data stores found in response: ", string(body))
+		return ""
+	}
+
 	setToRedis("data_store_id", dataStores[0].DataStore, 0)
-	// save the date and time the data store ID was last updated
 	setToRedis("data_store_id_last_updated", strconv.FormatInt(time.Now().Unix(), 10), 0)
 
 	return dataStores[0].DataStore

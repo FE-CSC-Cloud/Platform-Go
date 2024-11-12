@@ -166,6 +166,18 @@ func DeleteServer(c echo.Context) error {
 		log.Println("Error connecting to database: ", err)
 	}
 
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, "Error converting ID to int")
+	}
+
+	// delete all the DNS records for the server
+	err = deleteDNSRecordsForServer(idInt, db)
+	if err != nil {
+		log.Println("Error deleting DNS records for server: ", err)
+		return c.JSON(http.StatusBadRequest, "Error deleting DNS records for server")
+	}
+
 	// get the vCenter ID from the database
 	var (
 		vCenterID  string
@@ -193,17 +205,6 @@ func DeleteServer(c echo.Context) error {
 	if err != nil {
 		log.Println("Error executing statement: ", err)
 		return c.JSON(http.StatusBadRequest, "Error deleting server from database")
-	}
-	idInt, err := strconv.Atoi(id)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Error converting ID to int")
-	}
-
-	// delete all the DNS records for the server
-	err = deleteDNSRecordsForServer(idInt, db)
-	if err != nil {
-		log.Println("Error deleting DNS records for server: ", err)
-		return c.JSON(http.StatusBadRequest, "Error deleting DNS records for server")
 	}
 
 	err = unassignIPfromVM(vCenterID)
