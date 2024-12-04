@@ -88,8 +88,8 @@ func createvCenterVM(session, studentID, vmName, templateName string, storage, m
 	reqBody := VMCreateRequest{
 		Name: "OICT-AUTO-" + studentID + "-" + vmName,
 		Placement: map[string]string{
-			"cluster": "domain-c8",
-			"folder":  "group-v4",
+			"cluster": getEnvVar("CLUSTER_ID"),
+			"folder":  getEnvVar("FOLDER_ID"),
 		},
 		DiskStorage: map[string]string{
 			"datastore": datastore,
